@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Sistema de Clientes e Pedidos", layout="wide")
 
 # Use the consultas_medicas schema (reaproveitando o script fornecido)
-db = MySQLDB(host='localhost', user='root', password='sua_senha', database='consultas_medicas')
+db = MySQLDB(host='127.0.0.1', user='root', password='Root123.', database='consultas_medicas')
 conn = db.connect()
 
 def get_pedidos_df():

@@ -9,7 +9,7 @@ class ValidationError(Exception):
 
 
 class MySQLDB:
-    def __init__(self, host='localhost', user='root', password='', database=None, port=3306):
+    def __init__(self, host='127.0.0.1', user='root', password='Root.', database=None, port=3306):
         self.host = host
         self.user = user
         self.password = password
