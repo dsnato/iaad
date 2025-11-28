@@ -1,5 +1,3 @@
-# ...existing code...
-import re
 from datetime import datetime, date
 import mysql.connector
 from mysql.connector import Error
