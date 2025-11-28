@@ -1,12 +1,11 @@
+# ...existing code...
 import re
-from datetime import datetime
+from datetime import datetime, date
 import mysql.connector
 from mysql.connector import Error
 
-
 class ValidationError(Exception):
     pass
-
 
 class MySQLDB:
     def __init__(self, host='127.0.0.1', user='root', password='Root.', database=None, port=3306):
@@ -18,8 +17,15 @@ class MySQLDB:
         self.conn = None
 
     def connect(self):
-        if self.conn and getattr(self.conn, 'is_connected', lambda: False)():
-            return self.conn
+        """Establish and return a MySQL connection (reuses if já conectado)."""
+        if self.conn is not None:
+            try:
+                if getattr(self.conn, "is_connected", lambda: False)():
+                    return self.conn
+            except Exception:
+                # attempt to recreate connection if is_connected check fails
+                self.conn = None
+
         try:
             self.conn = mysql.connector.connect(
                 host=self.host,
@@ -27,7 +33,7 @@ class MySQLDB:
                 password=self.password,
                 database=self.database,
                 port=self.port,
-                autocommit=False,
+                autocommit=False
             )
             return self.conn
         except Error as e:
@@ -39,8 +45,17 @@ class MySQLDB:
                 self.conn.close()
             except Exception:
                 pass
+            finally:
+                self.conn = None
 
     def _execute(self, sql, params=None, fetchone=False, fetchall=False, commit=False):
+        """
+        Helper to execute queries.
+        - params: tuple or dict
+        - fetchone/fetchall: choose result mode
+        - commit: commit if True
+        Returns rows (list of dict) or single dict for fetchone or None.
+        """
         conn = self.connect()
         cursor = conn.cursor(dictionary=True)
         try:
@@ -53,171 +68,224 @@ class MySQLDB:
                 return cursor.fetchall()
             return None
         except Error as e:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+            # rethrow to be handled by caller
+            conn.rollback()
             raise
         finally:
-            cursor.close()
+            try:
+                cursor.close()
+            except Exception:
+                pass
 
     # --- Validations ---
     def validate_cpf(self, cpf: str):
         if cpf is None:
-            raise ValidationError('CPF é obrigatório')
+            raise ValidationError("CPF é obrigatório.")
         pattern = r'^[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}$'
         if not re.match(pattern, cpf):
-            raise ValidationError('CPF inválido. Formato obrigatório: XXX.XXX.XXX-XX')
+            raise ValidationError("CPF inválido. Formato obrigatório: XXX.XXX.XXX-XX")
+        return True
 
     def validate_email(self, email: str):
         if email is None or email == '':
             return True
         pattern = r'^[^@\s]+@[^@\s]+\.[^@\s]+$'
         if not re.match(pattern, email):
-            raise ValidationError('E-mail em formato inválido')
+            raise ValidationError("E-mail inválido.")
+        return True
 
     def validate_phone(self, phone: str):
         if phone is None or phone == '':
             return True
-        patterns = [
-            r'^\([0-9]{2}\)\s*[0-9]{4}-[0-9]{4}$',
-            r'^\([0-9]{2}\)\s*[0-9]{5}-[0-9]{4}$',
-        ]
-        if not any(re.match(p, phone) for p in patterns):
-            raise ValidationError('Telefone em formato inválido. Exemplos: (81) 3042-1112 ou (81) 99999-9999')
+        # Accept patterns like (DD) XXXX-XXXX or (DD) XXXXX-XXXX (with optional spaces)
+        pattern = r'^\([0-9]{2}\)\s*[0-9]{4,5}-[0-9]{4}$'
+        if not re.match(pattern, phone):
+            raise ValidationError("Telefone inválido. Formato esperado: (DD) XXXX-XXXX ou (DD) XXXXX-XXXX")
+        return True
 
     def _parse_datetime(self, value):
+        """Normalize input datetime/date/string to Python datetime object."""
+        if value is None:
+            return None
         if isinstance(value, datetime):
-            return value.strftime('%Y-%m-%d %H:%M:%S')
+            return value
+        if isinstance(value, date):
+            return datetime(value.year, value.month, value.day)
         if isinstance(value, str):
+            # try ISO formats and common formats
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    dt = datetime.strptime(value, fmt)
+                    return dt
+                except Exception:
+                    continue
+            # last resort: try fromisoformat
             try:
-                # Accept both date and datetime-like strings
-                dt = datetime.fromisoformat(value)
-                return dt.strftime('%Y-%m-%d %H:%M:%S')
+                return datetime.fromisoformat(value)
             except Exception:
-                # try common MySQL datetime format
-                return value
-        return value
+                raise ValidationError("Formato de data/hora inválido. Use YYYY-MM-DD HH:MM:SS")
+        raise ValidationError("Tipo de data/hora inválido.")
 
     # --- Clientes (Paciente) CRUD ---
     def get_clientes(self):
         sql = """
-        SELECT CpfPaciente AS cpf, NomePac AS nome, DataNascimento AS data_nascimento,
-               Genero AS genero, Telefone AS telefone, Email AS email
+        SELECT
+            CpfPaciente AS cpf,
+            NomePac AS nome,
+            DataNascimento AS data_nascimento,
+            Genero AS genero,
+            Telefone AS telefone,
+            Email AS email
         FROM Paciente
         ORDER BY NomePac
         """
-        return self._execute(sql, fetchall=True)
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
 
     def create_cliente(self, cpf: str, nome: str, data_nascimento: str, genero: str = None, telefone: str = None, email: str = None):
+        # validations
         self.validate_cpf(cpf)
         self.validate_email(email)
         self.validate_phone(telefone)
-        sql = "INSERT INTO Paciente (CpfPaciente, NomePac, DataNascimento, Genero, Telefone, Email) VALUES (%s, %s, %s, %s, %s, %s)"
-        params = (cpf, nome, data_nascimento, genero, telefone, email)
+        dt = self._parse_datetime(data_nascimento)
+        sql = """
+        INSERT INTO Paciente (CpfPaciente, NomePac, DataNascimento, Genero, Telefone, Email)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """
         try:
-            self._execute(sql, params=params, commit=True)
-            return cpf
-        except Error:
+            self._execute(sql, params=(cpf, nome, dt.date().isoformat(), genero or '', telefone or '', email or ''), commit=True)
+            return True
+        except Error as e:
             raise
 
     def update_cliente(self, cpf: str, nome: str = None, data_nascimento: str = None, genero: str = None, telefone: str = None, email: str = None):
-        # Only update provided fields
-        if not any([nome, data_nascimento, genero, telefone, email]):
-            return False
-        if telefone:
-            self.validate_phone(telefone)
-        if email:
-            self.validate_email(email)
-        parts = []
-        params = []
-        if nome:
-            parts.append('NomePac = %s'); params.append(nome)
-        if data_nascimento:
-            parts.append('DataNascimento = %s'); params.append(data_nascimento)
-        if genero:
-            parts.append('Genero = %s'); params.append(genero)
-        if telefone is not None:
-            parts.append('Telefone = %s'); params.append(telefone)
+        if not cpf:
+            raise ValidationError("CPF do cliente obrigatório para atualização.")
+        # validate provided fields
         if email is not None:
-            parts.append('Email = %s'); params.append(email)
-        sql = f"UPDATE Paciente SET {', '.join(parts)} WHERE CpfPaciente = %s"
+            self.validate_email(email)
+        if telefone is not None:
+            self.validate_phone(telefone)
+        if data_nascimento is not None:
+            dt = self._parse_datetime(data_nascimento)
+            data_nascimento = dt.date().isoformat()
+        # build dynamic SET
+        sets = []
+        params = []
+        if nome is not None:
+            sets.append("NomePac = %s"); params.append(nome)
+        if data_nascimento is not None:
+            sets.append("DataNascimento = %s"); params.append(data_nascimento)
+        if genero is not None:
+            sets.append("Genero = %s"); params.append(genero)
+        if telefone is not None:
+            sets.append("Telefone = %s"); params.append(telefone)
+        if email is not None:
+            sets.append("Email = %s"); params.append(email)
+        if not sets:
+            return 0
+        sql = f"UPDATE Paciente SET {', '.join(sets)} WHERE CpfPaciente = %s"
         params.append(cpf)
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error:
+        except Error as e:
             raise
 
     def delete_cliente(self, cpf: str):
+        if not cpf:
+            raise ValidationError("CPF do cliente obrigatório para exclusão.")
         sql = "DELETE FROM Paciente WHERE CpfPaciente = %s"
         try:
             self._execute(sql, params=(cpf,), commit=True)
             return True
-        except Error:
+        except Error as e:
             raise
 
     # --- Pedidos (Consulta) CRUD ---
     def get_pedidos(self):
         sql = """
-        SELECT c.CodCli, cl.NomeCli AS clinica_nome, c.CodMed, m.NomeMed AS medico_nome,
-               c.CpfPaciente, p.NomePac AS paciente_nome, c.Data_Hora
+        SELECT
+            c.CodCli AS CodCli,
+            cl.NomeCli AS clinica_nome,
+            c.CodMed AS CodMed,
+            m.NomeMed AS medico_nome,
+            c.CpfPaciente AS CpfPaciente,
+            p.NomePac AS paciente_nome,
+            c.Data_Hora AS Data_Hora
         FROM Consulta c
         LEFT JOIN Clinica cl ON c.CodCli = cl.CodCli
         LEFT JOIN Medico m ON c.CodMed = m.CodMed
         LEFT JOIN Paciente p ON c.CpfPaciente = p.CpfPaciente
-        ORDER BY c.Data_Hora DESC
+        ORDER BY c.Data_Hora
         """
-        return self._execute(sql, fetchall=True)
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
 
     def get_pedido_por_id(self, codcli: str, codmed: str, cpf: str, data_hora):
-        data_hora = self._parse_datetime(data_hora)
-        sql = "SELECT * FROM Consulta WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s"
-        return self._execute(sql, params=(codcli, codmed, cpf, data_hora), fetchone=True)
+        if not (codcli and codmed and cpf and data_hora):
+            raise ValidationError("Chave completa do pedido é obrigatória.")
+        dt = self._parse_datetime(data_hora)
+        sql = """
+        SELECT
+            CodCli, CodMed, CpfPaciente, Data_Hora
+        FROM Consulta
+        WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s
+        """
+        row = self._execute(sql, params=(codcli, codmed, cpf, dt.strftime("%Y-%m-%d %H:%M:%S")), fetchone=True)
+        return row
 
     def create_pedido(self, codcli: str, codmed: str, cpf: str, data_hora):
-        # validate formats
-        self.validate_cpf(cpf)
-        data_hora = self._parse_datetime(data_hora)
-        sql = "INSERT INTO Consulta (CodCli, CodMed, CpfPaciente, Data_Hora) VALUES (%s, %s, %s, %s)"
+        if not (codcli and codmed and cpf and data_hora):
+            raise ValidationError("Todos os campos do pedido são obrigatórios.")
+        dt = self._parse_datetime(data_hora)
+        sql = """
+        INSERT INTO Consulta (CodCli, CodMed, CpfPaciente, Data_Hora)
+        VALUES (%s, %s, %s, %s)
+        """
         try:
-            self._execute(sql, params=(codcli, codmed, cpf, data_hora), commit=True)
-            return (codcli, codmed, cpf, data_hora)
-        except Error:
+            self._execute(sql, params=(codcli, codmed, cpf, dt.strftime("%Y-%m-%d %H:%M:%S")), commit=True)
+            return True
+        except Error as e:
             raise
 
     def update_pedido(self, old_keys: tuple, new_values: dict):
-        # old_keys = (codcli, codmed, cpf, data_hora)
-        # new_values may contain keys: CodCli, CodMed, CpfPaciente, Data_Hora
+        """
+        old_keys: (codcli, codmed, cpf, data_hora)
+        new_values: dict with any of keys codcli, codmed, cpf, data_hora
+        """
         if not old_keys or len(old_keys) != 4:
-            raise ValueError('old_keys deve ser (CodCli, CodMed, CpfPaciente, Data_Hora)')
-        set_parts = []
+            raise ValidationError("old_keys deve conter (codcli, codmed, cpf, data_hora).")
+        codcli_old, codmed_old, cpf_old, data_hora_old = old_keys
+        dt_old = self._parse_datetime(data_hora_old)
+        sets = []
         params = []
-        allowed = {'CodCli', 'CodMed', 'CpfPaciente', 'Data_Hora'}
-        for k, v in new_values.items():
-            if k not in allowed:
-                continue
-            if k == 'CpfPaciente':
-                self.validate_cpf(v)
-            if k == 'Data_Hora':
-                v = self._parse_datetime(v)
-            set_parts.append(f"{k} = %s")
-            params.append(v)
-        if not set_parts:
-            return False
-        sql = f"UPDATE Consulta SET {', '.join(set_parts)} WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s"
-        params.extend(list(old_keys))
+        if 'codcli' in new_values:
+            sets.append("CodCli = %s"); params.append(new_values['codcli'])
+        if 'codmed' in new_values:
+            sets.append("CodMed = %s"); params.append(new_values['codmed'])
+        if 'cpf' in new_values:
+            sets.append("CpfPaciente = %s"); params.append(new_values['cpf'])
+        if 'data_hora' in new_values:
+            dt_new = self._parse_datetime(new_values['data_hora'])
+            sets.append("Data_Hora = %s"); params.append(dt_new.strftime("%Y-%m-%d %H:%M:%S"))
+        if not sets:
+            return 0
+        sql = f"UPDATE Consulta SET {', '.join(sets)} WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s"
+        params.extend([codcli_old, codmed_old, cpf_old, dt_old.strftime("%Y-%m-%d %H:%M:%S")])
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error:
+        except Error as e:
             raise
 
     def delete_pedido(self, codcli: str, codmed: str, cpf: str, data_hora):
-        data_hora = self._parse_datetime(data_hora)
+        if not (codcli and codmed and cpf and data_hora):
+            raise ValidationError("Chave completa do pedido é obrigatória.")
+        dt = self._parse_datetime(data_hora)
         sql = "DELETE FROM Consulta WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s"
         try:
-            self._execute(sql, params=(codcli, codmed, cpf, data_hora), commit=True)
+            self._execute(sql, params=(codcli, codmed, cpf, dt.strftime("%Y-%m-%d %H:%M:%S")), commit=True)
             return True
-        except Error:
+        except Error as e:
             raise
