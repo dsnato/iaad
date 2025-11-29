@@ -422,3 +422,251 @@ class MySQLDB:
             return True
         except Error as e:
             raise
+
+    # ========================================
+    # CONSULTAS NÃO TRIVIAIS - BONIFICAÇÃO
+    # ========================================
+
+    def get_estatisticas_por_clinica(self):
+        """
+        Retorna estatísticas de consultas por clínica.
+        Usa: COUNT, GROUP BY, LEFT JOIN
+        """
+        sql = """
+        SELECT 
+            cl.CodCli AS codigo_clinica,
+            cl.NomeCli AS nome_clinica,
+            COUNT(c.CodCli) AS total_consultas,
+            COUNT(DISTINCT c.CodMed) AS total_medicos_atendendo,
+            COUNT(DISTINCT c.CpfPaciente) AS total_pacientes_atendidos
+        FROM Clinica cl
+        LEFT JOIN Consulta c ON cl.CodCli = c.CodCli
+        GROUP BY cl.CodCli, cl.NomeCli
+        ORDER BY total_consultas DESC
+        """
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
+
+    def get_medicos_mais_atendimentos(self, limit=10):
+        """
+        Ranking de médicos com mais consultas agendadas.
+        Usa: COUNT, GROUP BY, ORDER BY, LIMIT
+        """
+        sql = """
+        SELECT 
+            m.CodMed AS codigo_medico,
+            m.NomeMed AS nome_medico,
+            m.Especialidade AS especialidade,
+            COUNT(c.CodMed) AS total_consultas,
+            COUNT(DISTINCT c.CpfPaciente) AS pacientes_unicos
+        FROM Medico m
+        LEFT JOIN Consulta c ON m.CodMed = c.CodMed
+        GROUP BY m.CodMed, m.NomeMed, m.Especialidade
+        ORDER BY total_consultas DESC
+        LIMIT %s
+        """
+        rows = self._execute(sql, params=(limit,), fetchall=True)
+        return rows or []
+
+    def get_consultas_por_periodo(self, data_inicio, data_fim):
+        """
+        Consultas em um período específico com informações completas.
+        Usa: BETWEEN, manipulação de datas, múltiplos JOINs
+        """
+        dt_inicio = self._parse_datetime(data_inicio)
+        dt_fim = self._parse_datetime(data_fim)
+        
+        sql = """
+        SELECT 
+            c.Data_Hora AS data_hora,
+            cl.NomeCli AS clinica,
+            m.NomeMed AS medico,
+            m.Especialidade AS especialidade,
+            p.NomePac AS paciente,
+            p.Telefone AS telefone_paciente,
+            DATEDIFF(c.Data_Hora, NOW()) AS dias_ate_consulta
+        FROM Consulta c
+        INNER JOIN Clinica cl ON c.CodCli = cl.CodCli
+        INNER JOIN Medico m ON c.CodMed = m.CodMed
+        INNER JOIN Paciente p ON c.CpfPaciente = p.CpfPaciente
+        WHERE c.Data_Hora BETWEEN %s AND %s
+        ORDER BY c.Data_Hora
+        """
+        rows = self._execute(sql, params=(dt_inicio, dt_fim), fetchall=True)
+        return rows or []
+
+    def get_pacientes_por_genero(self):
+        """
+        Estatísticas demográficas dos pacientes.
+        Usa: COUNT, GROUP BY, agregação
+        """
+        sql = """
+        SELECT 
+            COALESCE(NULLIF(Genero, ''), 'Não informado') AS genero,
+            COUNT(*) AS total_pacientes,
+            ROUND(AVG(YEAR(CURDATE()) - YEAR(DataNascimento)), 1) AS idade_media,
+            MIN(YEAR(CURDATE()) - YEAR(DataNascimento)) AS idade_minima,
+            MAX(YEAR(CURDATE()) - YEAR(DataNascimento)) AS idade_maxima
+        FROM Paciente
+        GROUP BY Genero
+        ORDER BY total_pacientes DESC
+        """
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
+
+    def get_consultas_por_mes(self, ano=None):
+        """
+        Distribuição de consultas por mês.
+        Usa: DATE_FORMAT, COUNT, GROUP BY, manipulação de datas
+        """
+        if ano is None:
+            ano = datetime.now().year
+        
+        sql = """
+        SELECT 
+            DATE_FORMAT(Data_Hora, '%%Y-%%m') AS mes,
+            MONTH(Data_Hora) AS numero_mes,
+            MONTHNAME(Data_Hora) AS nome_mes,
+            COUNT(*) AS total_consultas,
+            COUNT(DISTINCT CodMed) AS medicos_ativos,
+            COUNT(DISTINCT CpfPaciente) AS pacientes_atendidos
+        FROM Consulta
+        WHERE YEAR(Data_Hora) = %s
+        GROUP BY DATE_FORMAT(Data_Hora, '%%Y-%%m'), MONTH(Data_Hora), MONTHNAME(Data_Hora)
+        ORDER BY numero_mes
+        """
+        rows = self._execute(sql, params=(ano,), fetchall=True)
+        return rows or []
+
+    def get_especialidades_mais_procuradas(self):
+        """
+        Ranking de especialidades médicas mais procuradas.
+        Usa: COUNT, GROUP BY, ORDER BY
+        """
+        sql = """
+        SELECT 
+            COALESCE(NULLIF(m.Especialidade, ''), 'Não especificada') AS especialidade,
+            COUNT(c.CodMed) AS total_consultas,
+            COUNT(DISTINCT c.CpfPaciente) AS pacientes_unicos,
+            COUNT(DISTINCT m.CodMed) AS medicos_especialidade
+        FROM Medico m
+        LEFT JOIN Consulta c ON m.CodMed = c.CodMed
+        GROUP BY m.Especialidade
+        ORDER BY total_consultas DESC
+        """
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
+
+    def get_taxa_ocupacao_por_dia_semana(self):
+        """
+        Análise de ocupação por dia da semana.
+        Usa: DAYOFWEEK, DAYNAME, COUNT, AVG, GROUP BY
+        """
+        sql = """
+        SELECT 
+            DAYOFWEEK(Data_Hora) AS numero_dia,
+            DAYNAME(Data_Hora) AS dia_semana,
+            COUNT(*) AS total_consultas,
+            COUNT(DISTINCT CodCli) AS clinicas_ativas,
+            ROUND(COUNT(*) / COUNT(DISTINCT DATE(Data_Hora)), 2) AS media_consultas_por_dia
+        FROM Consulta
+        GROUP BY DAYOFWEEK(Data_Hora), DAYNAME(Data_Hora)
+        ORDER BY numero_dia
+        """
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
+
+    def get_pacientes_sem_consulta(self):
+        """
+        Pacientes cadastrados que nunca tiveram consulta.
+        Usa: LEFT JOIN com filtro IS NULL
+        """
+        sql = """
+        SELECT 
+            p.CpfPaciente AS cpf,
+            p.NomePac AS nome,
+            p.Telefone AS telefone,
+            p.Email AS email,
+            YEAR(CURDATE()) - YEAR(p.DataNascimento) AS idade,
+            DATEDIFF(CURDATE(), p.DataNascimento) AS dias_cadastrado
+        FROM Paciente p
+        LEFT JOIN Consulta c ON p.CpfPaciente = c.CpfPaciente
+        WHERE c.CpfPaciente IS NULL
+        ORDER BY p.NomePac
+        """
+        rows = self._execute(sql, fetchall=True)
+        return rows or []
+
+    def get_consultas_proximas(self, dias=7):
+        """
+        Consultas agendadas para os próximos N dias.
+        Usa: DATE_ADD, CURDATE, manipulação de datas
+        """
+        sql = """
+        SELECT 
+            c.Data_Hora AS data_hora,
+            cl.NomeCli AS clinica,
+            cl.Telefone AS telefone_clinica,
+            m.NomeMed AS medico,
+            m.Especialidade AS especialidade,
+            p.NomePac AS paciente,
+            p.Telefone AS telefone_paciente,
+            p.Email AS email_paciente,
+            DATEDIFF(c.Data_Hora, NOW()) AS dias_ate_consulta,
+            HOUR(c.Data_Hora) AS hora_consulta
+        FROM Consulta c
+        INNER JOIN Clinica cl ON c.CodCli = cl.CodCli
+        INNER JOIN Medico m ON c.CodMed = m.CodMed
+        INNER JOIN Paciente p ON c.CpfPaciente = p.CpfPaciente
+        WHERE c.Data_Hora BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL %s DAY)
+        ORDER BY c.Data_Hora
+        """
+        rows = self._execute(sql, params=(dias,), fetchall=True)
+        return rows or []
+
+    def get_resumo_geral_sistema(self):
+        """
+        Dashboard completo com estatísticas gerais do sistema.
+        Usa: múltiplas agregações e subconsultas
+        """
+        sql = """
+        SELECT 
+            (SELECT COUNT(*) FROM Paciente) AS total_pacientes,
+            (SELECT COUNT(*) FROM Medico) AS total_medicos,
+            (SELECT COUNT(*) FROM Clinica) AS total_clinicas,
+            (SELECT COUNT(*) FROM Consulta) AS total_consultas,
+            (SELECT COUNT(*) FROM Consulta WHERE Data_Hora >= CURDATE()) AS consultas_futuras,
+            (SELECT COUNT(*) FROM Consulta WHERE Data_Hora < NOW()) AS consultas_passadas,
+            (SELECT COUNT(DISTINCT Especialidade) FROM Medico WHERE Especialidade != '') AS especialidades_disponiveis,
+            (SELECT ROUND(AVG(YEAR(CURDATE()) - YEAR(DataNascimento)), 1) FROM Paciente) AS idade_media_pacientes
+        """
+        row = self._execute(sql, fetchone=True)
+        return row or {}
+
+    def get_historico_paciente(self, cpf: str):
+        """
+        Histórico completo de consultas de um paciente.
+        Usa: múltiplos JOINs, ORDER BY com data
+        """
+        self.validate_cpf(cpf)
+        sql = """
+        SELECT 
+            c.Data_Hora AS data_hora,
+            cl.NomeCli AS clinica,
+            cl.Endereco AS endereco_clinica,
+            cl.Telefone AS telefone_clinica,
+            m.NomeMed AS medico,
+            m.Especialidade AS especialidade,
+            m.Telefone AS telefone_medico,
+            CASE 
+                WHEN c.Data_Hora < NOW() THEN 'Realizada'
+                ELSE 'Agendada'
+            END AS status
+        FROM Consulta c
+        INNER JOIN Clinica cl ON c.CodCli = cl.CodCli
+        INNER JOIN Medico m ON c.CodMed = m.CodMed
+        WHERE c.CpfPaciente = %s
+        ORDER BY c.Data_Hora DESC
+        """
+        rows = self._execute(sql, params=(cpf,), fetchall=True)
+        return rows or []
