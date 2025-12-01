@@ -2,17 +2,23 @@ from datetime import datetime, date
 import re
 import mysql.connector
 from mysql.connector import Error
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class ValidationError(Exception):
     pass
 
+
 class MySQLDB:
-    def __init__(self, host='127.0.0.1', user='root', password='Root.', database=None, port=3306):
-        self.host = host
-        self.user = user
-        self.password = password
-        self.database = database
-        self.port = port
+    def __init__(self, host=None, user=None, password=None, database=None, port=None):
+        self.host = host or os.getenv('DB_HOST', 'localhost')
+        self.user = user or os.getenv('DB_USER', 'root')
+        self.password = password or os.getenv('DB_PASSWORD', '')
+        self.database = database or os.getenv('DB_NAME', 'consultas_medicas')
+        self.port = port or int(os.getenv('DB_PORT', 3306))
         self.conn = None
 
     def connect(self):
@@ -35,8 +41,9 @@ class MySQLDB:
                 autocommit=False
             )
             return self.conn
-        except Error as e:
-            raise
+
+        except Exception as e:
+            raise Exception(f"Erro ao conectar ao banco de dados: {str(e)}")
 
     def close(self):
         """Fecha a conexão com o banco de dados."""
@@ -67,9 +74,9 @@ class MySQLDB:
             if fetchall:
                 return cursor.fetchall()
             return None
-        except Error as e:
+        except Exception as e:
             conn.rollback()
-            raise
+            raise Exception(f"Erro ao executar consulta: {str(e)}")
         finally:
             try:
                 cursor.close()
@@ -138,7 +145,10 @@ class MySQLDB:
         rows = self._execute(sql, fetchall=True)
         return rows or []
 
-    def create_cliente(self, cpf: str, nome: str, data_nascimento: str, genero: str = None, telefone: str = None, email: str = None):
+    def create_cliente(
+        self, cpf: str, nome: str, data_nascimento: str,
+        genero: str = None, telefone: str = None, email: str = None
+    ):
         self.validate_cpf(cpf)
         self.validate_email(email)
         self.validate_phone(telefone)
@@ -148,12 +158,20 @@ class MySQLDB:
         VALUES (%s, %s, %s, %s, %s, %s)
         """
         try:
-            self._execute(sql, params=(cpf, nome, dt.date().isoformat(), genero or '', telefone or '', email or ''), commit=True)
+            self._execute(
+                sql,
+                params=(cpf, nome, dt.date().isoformat(),
+                        genero or '', telefone or '', email or ''),
+                commit=True
+            )
             return True
-        except Error as e:
+        except Error:
             raise
 
-    def update_cliente(self, cpf: str, nome: str = None, data_nascimento: str = None, genero: str = None, telefone: str = None, email: str = None):
+    def update_cliente(
+        self, cpf: str, nome: str = None, data_nascimento: str = None,
+        genero: str = None, telefone: str = None, email: str = None
+    ):
         if not cpf:
             raise ValidationError("CPF do cliente obrigatório para atualização.")
         if email is not None:
@@ -166,15 +184,20 @@ class MySQLDB:
         sets = []
         params = []
         if nome is not None:
-            sets.append("NomePac = %s"); params.append(nome)
+            sets.append("NomePac = %s")
+            params.append(nome)
         if data_nascimento is not None:
-            sets.append("DataNascimento = %s"); params.append(data_nascimento)
+            sets.append("DataNascimento = %s")
+            params.append(data_nascimento)
         if genero is not None:
-            sets.append("Genero = %s"); params.append(genero)
+            sets.append("Genero = %s")
+            params.append(genero)
         if telefone is not None:
-            sets.append("Telefone = %s"); params.append(telefone)
+            sets.append("Telefone = %s")
+            params.append(telefone)
         if email is not None:
-            sets.append("Email = %s"); params.append(email)
+            sets.append("Email = %s")
+            params.append(email)
         if not sets:
             return 0
         sql = f"UPDATE Paciente SET {', '.join(sets)} WHERE CpfPaciente = %s"
@@ -182,7 +205,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def delete_cliente(self, cpf: str):
@@ -192,7 +215,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(cpf,), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     # --- Pedidos (Consulta) CRUD ---
@@ -239,7 +262,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codcli, codmed, cpf, dt.strftime("%Y-%m-%d %H:%M:%S")), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def update_pedido(self, old_keys: tuple, new_values: dict):
@@ -250,22 +273,31 @@ class MySQLDB:
         sets = []
         params = []
         if 'codcli' in new_values:
-            sets.append("CodCli = %s"); params.append(new_values['codcli'])
+            sets.append("CodCli = %s")
+            params.append(new_values['codcli'])
         if 'codmed' in new_values:
-            sets.append("CodMed = %s"); params.append(new_values['codmed'])
+            sets.append("CodMed = %s")
+            params.append(new_values['codmed'])
         if 'cpf' in new_values:
-            sets.append("CpfPaciente = %s"); params.append(new_values['cpf'])
+            sets.append("CpfPaciente = %s")
+            params.append(new_values['cpf'])
         if 'data_hora' in new_values:
             dt_new = self._parse_datetime(new_values['data_hora'])
-            sets.append("Data_Hora = %s"); params.append(dt_new.strftime("%Y-%m-%d %H:%M:%S"))
+            sets.append("Data_Hora = %s")
+            params.append(dt_new.strftime("%Y-%m-%d %H:%M:%S"))
         if not sets:
             return 0
-        sql = f"UPDATE Consulta SET {', '.join(sets)} WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s AND Data_Hora = %s"
-        params.extend([codcli_old, codmed_old, cpf_old, dt_old.strftime("%Y-%m-%d %H:%M:%S")])
+        sql = (
+            f"UPDATE Consulta SET {', '.join(sets)} "
+            "WHERE CodCli = %s AND CodMed = %s AND CpfPaciente = %s "
+            "AND Data_Hora = %s"
+        )
+        params.extend([codcli_old, codmed_old, cpf_old,
+                       dt_old.strftime("%Y-%m-%d %H:%M:%S")])
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def delete_pedido(self, codcli: str, codmed: str, cpf: str, data_hora):
@@ -276,7 +308,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codcli, codmed, cpf, dt.strftime("%Y-%m-%d %H:%M:%S")), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     # --- Clinica CRUD ---
@@ -301,7 +333,10 @@ class MySQLDB:
 
     def get_clinica_por_id(self, codcli: str):
         self._validate_codcli(codcli)
-        sql = "SELECT CodCli AS codcli, NomeCli AS nome, Endereco AS endereco, Telefone AS telefone, Email AS email FROM Clinica WHERE CodCli = %s"
+        sql = (
+            "SELECT CodCli AS codcli, NomeCli AS nome, Endereco AS endereco, "
+            "Telefone AS telefone, Email AS email FROM Clinica WHERE CodCli = %s"
+        )
         row = self._execute(sql, params=(codcli,), fetchone=True)
         return row
 
@@ -313,7 +348,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codcli, nome, endereco or '', telefone or '', email or ''), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def update_clinica(self, codcli: str, nome: str = None, endereco: str = None, telefone: str = None, email: str = None):
@@ -325,13 +360,17 @@ class MySQLDB:
         sets = []
         params = []
         if nome is not None:
-            sets.append("NomeCli = %s"); params.append(nome)
+            sets.append("NomeCli = %s")
+            params.append(nome)
         if endereco is not None:
-            sets.append("Endereco = %s"); params.append(endereco)
+            sets.append("Endereco = %s")
+            params.append(endereco)
         if telefone is not None:
-            sets.append("Telefone = %s"); params.append(telefone)
+            sets.append("Telefone = %s")
+            params.append(telefone)
         if email is not None:
-            sets.append("Email = %s"); params.append(email)
+            sets.append("Email = %s")
+            params.append(email)
         if not sets:
             return 0
         sql = f"UPDATE Clinica SET {', '.join(sets)} WHERE CodCli = %s"
@@ -339,7 +378,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def delete_clinica(self, codcli: str):
@@ -348,7 +387,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codcli,), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     # --- Medico CRUD ---
@@ -373,7 +412,11 @@ class MySQLDB:
 
     def get_medico_por_id(self, codmed: str):
         self._validate_codmed(codmed)
-        sql = "SELECT CodMed AS codmed, NomeMed AS nome, Especialidade AS especialidade, Telefone AS telefone, Email AS email FROM Medico WHERE CodMed = %s"
+        sql = (
+            "SELECT CodMed AS codmed, NomeMed AS nome, "
+            "Especialidade AS especialidade, Telefone AS telefone, "
+            "Email AS email FROM Medico WHERE CodMed = %s"
+        )
         row = self._execute(sql, params=(codmed,), fetchone=True)
         return row
 
@@ -385,10 +428,13 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codmed, nome, especialidade or '', telefone or '', email or ''), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
-    def update_medico(self, codmed: str, nome: str = None, especialidade: str = None, telefone: str = None, email: str = None):
+    def update_medico(
+        self, codmed: str, nome: str = None, especialidade: str = None,
+        telefone: str = None, email: str = None
+    ):
         self._validate_codmed(codmed)
         if email is not None:
             self.validate_email(email)
@@ -397,13 +443,17 @@ class MySQLDB:
         sets = []
         params = []
         if nome is not None:
-            sets.append("NomeMed = %s"); params.append(nome)
+            sets.append("NomeMed = %s")
+            params.append(nome)
         if especialidade is not None:
-            sets.append("Especialidade = %s"); params.append(especialidade)
+            sets.append("Especialidade = %s")
+            params.append(especialidade)
         if telefone is not None:
-            sets.append("Telefone = %s"); params.append(telefone)
+            sets.append("Telefone = %s")
+            params.append(telefone)
         if email is not None:
-            sets.append("Email = %s"); params.append(email)
+            sets.append("Email = %s")
+            params.append(email)
         if not sets:
             return 0
         sql = f"UPDATE Medico SET {', '.join(sets)} WHERE CodMed = %s"
@@ -411,7 +461,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=tuple(params), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     def delete_medico(self, codmed: str):
@@ -420,7 +470,7 @@ class MySQLDB:
         try:
             self._execute(sql, params=(codmed,), commit=True)
             return True
-        except Error as e:
+        except Error:
             raise
 
     # ========================================
@@ -433,7 +483,7 @@ class MySQLDB:
         Usa: COUNT, GROUP BY, LEFT JOIN
         """
         sql = """
-        SELECT 
+        SELECT
             cl.CodCli AS codigo_clinica,
             cl.NomeCli AS nome_clinica,
             COUNT(c.CodCli) AS total_consultas,
@@ -453,7 +503,7 @@ class MySQLDB:
         Usa: COUNT, GROUP BY, ORDER BY, LIMIT
         """
         sql = """
-        SELECT 
+        SELECT
             m.CodMed AS codigo_medico,
             m.NomeMed AS nome_medico,
             m.Especialidade AS especialidade,
@@ -475,9 +525,9 @@ class MySQLDB:
         """
         dt_inicio = self._parse_datetime(data_inicio)
         dt_fim = self._parse_datetime(data_fim)
-        
+
         sql = """
-        SELECT 
+        SELECT
             c.Data_Hora AS data_hora,
             cl.NomeCli AS clinica,
             m.NomeMed AS medico,
@@ -501,7 +551,7 @@ class MySQLDB:
         Usa: COUNT, GROUP BY, agregação
         """
         sql = """
-        SELECT 
+        SELECT
             COALESCE(NULLIF(Genero, ''), 'Não informado') AS genero,
             COUNT(*) AS total_pacientes,
             ROUND(AVG(YEAR(CURDATE()) - YEAR(DataNascimento)), 1) AS idade_media,
@@ -521,9 +571,9 @@ class MySQLDB:
         """
         if ano is None:
             ano = datetime.now().year
-        
+
         sql = """
-        SELECT 
+        SELECT
             DATE_FORMAT(Data_Hora, '%%Y-%%m') AS mes,
             MONTH(Data_Hora) AS numero_mes,
             MONTHNAME(Data_Hora) AS nome_mes,
@@ -544,7 +594,7 @@ class MySQLDB:
         Usa: COUNT, GROUP BY, ORDER BY
         """
         sql = """
-        SELECT 
+        SELECT
             COALESCE(NULLIF(m.Especialidade, ''), 'Não especificada') AS especialidade,
             COUNT(c.CodMed) AS total_consultas,
             COUNT(DISTINCT c.CpfPaciente) AS pacientes_unicos,
@@ -563,7 +613,7 @@ class MySQLDB:
         Usa: DAYOFWEEK, DAYNAME, COUNT, AVG, GROUP BY
         """
         sql = """
-        SELECT 
+        SELECT
             DAYOFWEEK(Data_Hora) AS numero_dia,
             DAYNAME(Data_Hora) AS dia_semana,
             COUNT(*) AS total_consultas,
@@ -582,7 +632,7 @@ class MySQLDB:
         Usa: LEFT JOIN com filtro IS NULL
         """
         sql = """
-        SELECT 
+        SELECT
             p.CpfPaciente AS cpf,
             p.NomePac AS nome,
             p.Telefone AS telefone,
@@ -603,7 +653,7 @@ class MySQLDB:
         Usa: DATE_ADD, CURDATE, manipulação de datas
         """
         sql = """
-        SELECT 
+        SELECT
             c.Data_Hora AS data_hora,
             cl.NomeCli AS clinica,
             cl.Telefone AS telefone_clinica,
@@ -630,7 +680,7 @@ class MySQLDB:
         Usa: múltiplas agregações e subconsultas
         """
         sql = """
-        SELECT 
+        SELECT
             (SELECT COUNT(*) FROM Paciente) AS total_pacientes,
             (SELECT COUNT(*) FROM Medico) AS total_medicos,
             (SELECT COUNT(*) FROM Clinica) AS total_clinicas,
@@ -650,7 +700,7 @@ class MySQLDB:
         """
         self.validate_cpf(cpf)
         sql = """
-        SELECT 
+        SELECT
             c.Data_Hora AS data_hora,
             cl.NomeCli AS clinica,
             cl.Endereco AS endereco_clinica,
@@ -658,7 +708,7 @@ class MySQLDB:
             m.NomeMed AS medico,
             m.Especialidade AS especialidade,
             m.Telefone AS telefone_medico,
-            CASE 
+            CASE
                 WHEN c.Data_Hora < NOW() THEN 'Realizada'
                 ELSE 'Agendada'
             END AS status

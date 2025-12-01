@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import Dict, Optional
 
 # ============================================================================
 # CONFIGURAÇÃO STREAMLIT
@@ -56,6 +56,7 @@ if "proximo_id_consulta" not in st.session_state:
 # FUNÇÕES HELPER - PACIENTES
 # ============================================================================
 
+
 def get_paciente_por_id(id_paciente: int) -> Optional[Dict]:
     """Busca paciente por ID."""
     for p in st.session_state.pacientes:
@@ -63,9 +64,11 @@ def get_paciente_por_id(id_paciente: int) -> Optional[Dict]:
             return p
     return None
 
+
 def paciente_existe(id_paciente: int) -> bool:
     """Verifica se paciente existe."""
     return get_paciente_por_id(id_paciente) is not None
+
 
 def paciente_tem_consultas(id_paciente: int) -> bool:
     """Verifica se paciente tem consultas associadas."""
@@ -73,6 +76,7 @@ def paciente_tem_consultas(id_paciente: int) -> bool:
         if c["id_paciente"] == id_paciente:
             return True
     return False
+
 
 def criar_paciente(nome: str, idade: int, endereco: str) -> bool:
     """Cria novo paciente. Retorna True se sucesso."""
@@ -89,6 +93,7 @@ def criar_paciente(nome: str, idade: int, endereco: str) -> bool:
     registrar_log(f"Paciente '{nome}' criado com ID {novo_paciente['id']}")
     return True
 
+
 def atualizar_paciente(id_paciente: int, nome: str, idade: int, endereco: str) -> bool:
     """Atualiza paciente existente."""
     paciente = get_paciente_por_id(id_paciente)
@@ -101,6 +106,7 @@ def atualizar_paciente(id_paciente: int, nome: str, idade: int, endereco: str) -
     paciente["endereco"] = endereco
     registrar_log(f"Paciente ID {id_paciente} atualizado")
     return True
+
 
 def deletar_paciente(id_paciente: int) -> bool:
     """Deleta paciente se não tiver consultas (validação FK)."""
@@ -116,6 +122,7 @@ def deletar_paciente(id_paciente: int) -> bool:
 # FUNÇÕES HELPER - MÉDICOS
 # ============================================================================
 
+
 def get_medico_por_id(id_medico: int) -> Optional[Dict]:
     """Busca médico por ID."""
     for m in st.session_state.medicos:
@@ -123,9 +130,11 @@ def get_medico_por_id(id_medico: int) -> Optional[Dict]:
             return m
     return None
 
+
 def medico_existe(id_medico: int) -> bool:
     """Verifica se médico existe."""
     return get_medico_por_id(id_medico) is not None
+
 
 def medico_tem_consultas(id_medico: int) -> bool:
     """Verifica se médico tem consultas associadas."""
@@ -133,6 +142,7 @@ def medico_tem_consultas(id_medico: int) -> bool:
         if c["id_medico"] == id_medico:
             return True
     return False
+
 
 def criar_medico(nome: str, especialidade: str) -> bool:
     """Cria novo médico."""
@@ -148,6 +158,7 @@ def criar_medico(nome: str, especialidade: str) -> bool:
     registrar_log(f"Médico '{nome}' ({especialidade}) criado com ID {novo_medico['id']}")
     return True
 
+
 def atualizar_medico(id_medico: int, nome: str, especialidade: str) -> bool:
     """Atualiza médico existente."""
     medico = get_medico_por_id(id_medico)
@@ -159,6 +170,7 @@ def atualizar_medico(id_medico: int, nome: str, especialidade: str) -> bool:
     medico["especialidade"] = especialidade
     registrar_log(f"Médico ID {id_medico} atualizado")
     return True
+
 
 def deletar_medico(id_medico: int) -> bool:
     """Deleta médico se não tiver consultas."""
@@ -174,13 +186,14 @@ def deletar_medico(id_medico: int) -> bool:
 # FUNÇÕES HELPER - CONSULTAS
 # ============================================================================
 
+
 def criar_consulta(id_paciente: int, id_medico: int, data: datetime, descricao: str) -> bool:
     """Cria nova consulta com validação de FK."""
     if not paciente_existe(id_paciente) or not medico_existe(id_medico):
         return False
     if not descricao:
         return False
-    
+
     nova_consulta = {
         "id": st.session_state.proximo_id_consulta,
         "id_paciente": id_paciente,
@@ -190,11 +203,12 @@ def criar_consulta(id_paciente: int, id_medico: int, data: datetime, descricao: 
     }
     st.session_state.consultas.append(nova_consulta)
     st.session_state.proximo_id_consulta += 1
-    
+
     # TRIGGER: registra no log_acoes quando uma consulta é criada
     registrar_log(f"Consulta criada: ID {nova_consulta['id']} - Paciente {id_paciente}, Médico {id_medico}")
-    
+
     return True
+
 
 def atualizar_consulta(id_consulta: int, id_paciente: int, id_medico: int, data: datetime, descricao: str) -> bool:
     """Atualiza consulta existente."""
@@ -202,7 +216,7 @@ def atualizar_consulta(id_consulta: int, id_paciente: int, id_medico: int, data:
         return False
     if not descricao:
         return False
-    
+
     for c in st.session_state.consultas:
         if c["id"] == id_consulta:
             c["id_paciente"] = id_paciente
@@ -213,6 +227,7 @@ def atualizar_consulta(id_consulta: int, id_paciente: int, id_medico: int, data:
             return True
     return False
 
+
 def deletar_consulta(id_consulta: int) -> bool:
     """Deleta consulta."""
     for i, c in enumerate(st.session_state.consultas):
@@ -221,6 +236,7 @@ def deletar_consulta(id_consulta: int) -> bool:
             registrar_log(f"Consulta ID {id_consulta} deletada")
             return True
     return False
+
 
 def get_consulta_por_id(id_consulta: int) -> Optional[Dict]:
     """Busca consulta por ID."""
@@ -232,6 +248,7 @@ def get_consulta_por_id(id_consulta: int) -> Optional[Dict]:
 # ============================================================================
 # FUNÇÕES HELPER - LOG (TRIGGER)
 # ============================================================================
+
 
 def registrar_log(mensagem: str):
     """Registra ação no log (simula trigger do MySQL)."""
@@ -245,12 +262,13 @@ def registrar_log(mensagem: str):
 # TELAS DA APLICAÇÃO
 # ============================================================================
 
+
 def tela_home():
     """Tela inicial com resumo do sistema."""
     st.markdown("# 🏥 Sistema de Consultas Médicas")
     st.markdown("Bem-vindo ao Sistema de Gerenciamento de Consultas Médicas!")
     st.markdown("---")
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Pacientes", len(st.session_state.pacientes))
@@ -258,7 +276,7 @@ def tela_home():
         st.metric("Total de Médicos", len(st.session_state.medicos))
     with col3:
         st.metric("Total de Consultas", len(st.session_state.consultas))
-    
+
     st.markdown("---")
     st.markdown("### 📌 Sobre o Sistema")
     st.info(
@@ -272,21 +290,22 @@ def tela_home():
         """
     )
 
+
 def tela_pacientes():
     """Gerencia CRUD de pacientes."""
     st.markdown("## 👥 Gerenciamento de Pacientes")
-    
+
     tab1, tab2, tab3, tab4 = st.tabs(["Listar", "Criar", "Editar", "Deletar"])
-    
+
     # TAB: LISTAR
     with tab1:
         st.subheader("Lista de Pacientes")
         if st.session_state.pacientes:
             df = pd.DataFrame(st.session_state.pacientes)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.warning("Nenhum paciente cadastrado.")
-    
+
     # TAB: CRIAR
     with tab2:
         st.subheader("Criar Novo Paciente")
@@ -295,14 +314,14 @@ def tela_pacientes():
             idade = st.number_input("Idade", min_value=1, max_value=150, value=30)
             endereco = st.text_input("Endereço", placeholder="Ex: Rua A, 123")
             submitted = st.form_submit_button("Salvar Paciente")
-        
+
         if submitted:
             if criar_paciente(nome, idade, endereco):
                 st.success(f"✅ Paciente '{nome}' criado com sucesso!")
                 st.rerun()
             else:
                 st.error("❌ Erro ao criar paciente. Verifique os dados.")
-    
+
     # TAB: EDITAR
     with tab3:
         st.subheader("Editar Paciente")
@@ -311,13 +330,13 @@ def tela_pacientes():
             sel = st.selectbox("Selecione paciente", opcoes, key="sel_editar_pac")
             id_selecionado = int(sel.split(" - ")[0])
             paciente = get_paciente_por_id(id_selecionado)
-            
+
             with st.form("form_editar_paciente"):
                 nome = st.text_input("Nome", value=paciente["nome"])
                 idade = st.number_input("Idade", min_value=1, max_value=150, value=paciente["idade"])
                 endereco = st.text_input("Endereço", value=paciente["endereco"])
                 submitted = st.form_submit_button("Atualizar")
-            
+
             if submitted:
                 if atualizar_paciente(id_selecionado, nome, idade, endereco):
                     st.success("✅ Paciente atualizado com sucesso!")
@@ -326,7 +345,7 @@ def tela_pacientes():
                     st.error("❌ Erro ao atualizar paciente.")
         else:
             st.warning("Nenhum paciente para editar.")
-    
+
     # TAB: DELETAR
     with tab4:
         st.subheader("Deletar Paciente")
@@ -334,7 +353,7 @@ def tela_pacientes():
             opcoes = [f"{p['id']} - {p['nome']}" for p in st.session_state.pacientes]
             sel = st.selectbox("Selecione paciente", opcoes, key="sel_deletar_pac")
             id_selecionado = int(sel.split(" - ")[0])
-            
+
             if st.button("🗑️ Deletar Paciente", key="btn_deletar_pac"):
                 if deletar_paciente(id_selecionado):
                     st.success("✅ Paciente deletado com sucesso!")
@@ -344,21 +363,22 @@ def tela_pacientes():
         else:
             st.warning("Nenhum paciente para deletar.")
 
+
 def tela_medicos():
     """Gerencia CRUD de médicos."""
     st.markdown("## 👨‍⚕️ Gerenciamento de Médicos")
-    
+
     tab1, tab2, tab3, tab4 = st.tabs(["Listar", "Criar", "Editar", "Deletar"])
-    
+
     # TAB: LISTAR
     with tab1:
         st.subheader("Lista de Médicos")
         if st.session_state.medicos:
             df = pd.DataFrame(st.session_state.medicos)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch')
         else:
             st.warning("Nenhum médico cadastrado.")
-    
+
     # TAB: CRIAR
     with tab2:
         st.subheader("Criar Novo Médico")
@@ -370,16 +390,16 @@ def tela_medicos():
             )
             if especialidade == "Outro":
                 especialidade = st.text_input("Digite a especialidade")
-            
+
             submitted = st.form_submit_button("Salvar Médico")
-        
+
         if submitted:
             if criar_medico(nome, especialidade):
                 st.success(f"✅ Médico '{nome}' criado com sucesso!")
                 st.rerun()
             else:
                 st.error("❌ Erro ao criar médico. Verifique os dados.")
-    
+
     # TAB: EDITAR
     with tab3:
         st.subheader("Editar Médico")
@@ -388,12 +408,12 @@ def tela_medicos():
             sel = st.selectbox("Selecione médico", opcoes, key="sel_editar_med")
             id_selecionado = int(sel.split(" - ")[0])
             medico = get_medico_por_id(id_selecionado)
-            
+
             with st.form("form_editar_medico"):
                 nome = st.text_input("Nome", value=medico["nome"])
                 especialidade = st.text_input("Especialidade", value=medico["especialidade"])
                 submitted = st.form_submit_button("Atualizar")
-            
+
             if submitted:
                 if atualizar_medico(id_selecionado, nome, especialidade):
                     st.success("✅ Médico atualizado com sucesso!")
@@ -402,7 +422,7 @@ def tela_medicos():
                     st.error("❌ Erro ao atualizar médico.")
         else:
             st.warning("Nenhum médico para editar.")
-    
+
     # TAB: DELETAR
     with tab4:
         st.subheader("Deletar Médico")
@@ -410,7 +430,7 @@ def tela_medicos():
             opcoes = [f"{m['id']} - {m['nome']}" for m in st.session_state.medicos]
             sel = st.selectbox("Selecione médico", opcoes, key="sel_deletar_med")
             id_selecionado = int(sel.split(" - ")[0])
-            
+
             if st.button("🗑️ Deletar Médico", key="btn_deletar_med"):
                 if deletar_medico(id_selecionado):
                     st.success("✅ Médico deletado com sucesso!")
@@ -420,17 +440,18 @@ def tela_medicos():
         else:
             st.warning("Nenhum médico para deletar.")
 
+
 def tela_consultas():
     """Gerencia CRUD de consultas."""
     st.markdown("## 📅 Gerenciamento de Consultas")
-    
+
     tab1, tab2, tab3, tab4 = st.tabs(["Listar", "Criar", "Editar", "Deletar"])
-    
+
     # TAB: LISTAR
     with tab1:
         st.subheader("Lista de Consultas")
         if st.session_state.consultas:
-            dados = []
+            dados = list()
             for c in st.session_state.consultas:
                 paciente = get_paciente_por_id(c["id_paciente"])
                 medico = get_medico_por_id(c["id_medico"])
@@ -442,14 +463,14 @@ def tela_consultas():
                     "Descrição": c["descricao"]
                 })
             df = pd.DataFrame(dados)
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.warning("Nenhuma consulta cadastrada.")
-    
+
     # TAB: CRIAR
     with tab2:
         st.subheader("Criar Nova Consulta")
-        
+
         if not st.session_state.pacientes or not st.session_state.medicos:
             st.warning("⚠️ É necessário ter pelo menos um paciente e um médico cadastrados.")
         else:
@@ -457,22 +478,22 @@ def tela_consultas():
                 opcoes_pac = [f"{p['id']} - {p['nome']}" for p in st.session_state.pacientes]
                 sel_pac = st.selectbox("Selecione paciente", opcoes_pac)
                 id_paciente = int(sel_pac.split(" - ")[0])
-                
+
                 opcoes_med = [f"{m['id']} - {m['nome']} ({m['especialidade']})" for m in st.session_state.medicos]
                 sel_med = st.selectbox("Selecione médico", opcoes_med)
                 id_medico = int(sel_med.split(" - ")[0])
-                
-                data_consulta = st.datetime_input("Data e hora da consulta")
+
+                data_consulta = st.date_input("Data e hora da consulta")
                 descricao = st.text_area("Descrição da consulta")
                 submitted = st.form_submit_button("Criar Consulta")
-            
+
             if submitted:
                 if criar_consulta(id_paciente, id_medico, data_consulta, descricao):
                     st.success("✅ Consulta criada com sucesso!")
                     st.rerun()
                 else:
                     st.error("❌ Erro ao criar consulta. Verifique os dados.")
-    
+
     # TAB: EDITAR
     with tab3:
         st.subheader("Editar Consulta")
@@ -481,20 +502,20 @@ def tela_consultas():
             sel = st.selectbox("Selecione consulta", opcoes, key="sel_editar_cons")
             id_selecionado = int(sel.split(" - ")[0])
             consulta = get_consulta_por_id(id_selecionado)
-            
+
             with st.form("form_editar_consulta"):
                 opcoes_pac = [f"{p['id']} - {p['nome']}" for p in st.session_state.pacientes]
                 sel_pac = st.selectbox("Selecione paciente", opcoes_pac, key="edit_pac")
                 id_paciente = int(sel_pac.split(" - ")[0])
-                
+
                 opcoes_med = [f"{m['id']} - {m['nome']}" for m in st.session_state.medicos]
                 sel_med = st.selectbox("Selecione médico", opcoes_med, key="edit_med")
                 id_medico = int(sel_med.split(" - ")[0])
-                
-                data_consulta = st.datetime_input("Data e hora", value=consulta["data"])
+
+                data_consulta = st.date_input("Data e hora", value=consulta["data"])
                 descricao = st.text_area("Descrição", value=consulta["descricao"])
                 submitted = st.form_submit_button("Atualizar")
-            
+
             if submitted:
                 if atualizar_consulta(id_selecionado, id_paciente, id_medico, data_consulta, descricao):
                     st.success("✅ Consulta atualizada com sucesso!")
@@ -503,7 +524,7 @@ def tela_consultas():
                     st.error("❌ Erro ao atualizar consulta.")
         else:
             st.warning("Nenhuma consulta para editar.")
-    
+
     # TAB: DELETAR
     with tab4:
         st.subheader("Deletar Consulta")
@@ -511,7 +532,7 @@ def tela_consultas():
             opcoes = [f"{c['id']} - {get_paciente_por_id(c['id_paciente'])['nome']}" for c in st.session_state.consultas]
             sel = st.selectbox("Selecione consulta", opcoes, key="sel_deletar_cons")
             id_selecionado = int(sel.split(" - ")[0])
-            
+
             if st.button("🗑️ Deletar Consulta", key="btn_deletar_cons"):
                 if deletar_consulta(id_selecionado):
                     st.success("✅ Consulta deletada com sucesso!")
@@ -521,6 +542,7 @@ def tela_consultas():
         else:
             st.warning("Nenhuma consulta para deletar.")
 
+
 def tela_triggers():
     """Exibe log de ações (simula triggers do MySQL)."""
     st.markdown("## 🔔 Log de Ações (Triggers Simulados)")
@@ -528,11 +550,11 @@ def tela_triggers():
         "Este log registra automaticamente todas as ações de CRUD no sistema, "
         "simulando o comportamento de triggers do MySQL."
     )
-    
+
     if st.session_state.log_acoes:
         df_log = pd.DataFrame(st.session_state.log_acoes)
-        st.dataframe(df_log, use_container_width=True, hide_index=True)
-        
+        st.dataframe(df_log, width='stretch', hide_index=True)
+
         if st.button("🗑️ Limpar Log"):
             st.session_state.log_acoes = []
             st.success("Log limpo!")
@@ -540,10 +562,11 @@ def tela_triggers():
     else:
         st.warning("Nenhuma ação registrada no log.")
 
+
 def tela_consultas_avancadas():
     """Consultas avançadas e gráficos."""
     st.markdown("## 📊 Visualizações e Consultas Avançadas")
-    
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Consultas por Médico",
         "Idade Média Pacientes",
@@ -551,7 +574,7 @@ def tela_consultas_avancadas():
         "Intervalo de Datas",
         "Resumo Geral"
     ])
-    
+
     # TAB 1: Consultas por Médico
     with tab1:
         st.subheader("Quantidade de Consultas por Médico")
@@ -561,13 +584,13 @@ def tela_consultas_avancadas():
                 medico = get_medico_por_id(c["id_medico"])
                 nome_med = medico["nome"] if medico else "N/A"
                 dados[nome_med] = dados.get(nome_med, 0) + 1
-            
+
             df = pd.DataFrame(list(dados.items()), columns=["Médico", "Quantidade"])
             st.bar_chart(df.set_index("Médico"))
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.warning("Nenhuma consulta para exibir.")
-    
+
     # TAB 2: Idade Média dos Pacientes
     with tab2:
         st.subheader("Estatísticas de Pacientes")
@@ -576,7 +599,7 @@ def tela_consultas_avancadas():
             idade_media = sum(idades) / len(idades)
             idade_min = min(idades)
             idade_max = max(idades)
-            
+
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Idade Média", f"{idade_media:.1f} anos")
@@ -586,13 +609,13 @@ def tela_consultas_avancadas():
                 st.metric("Idade Máxima", f"{idade_max} anos")
             with col4:
                 st.metric("Total de Pacientes", len(st.session_state.pacientes))
-            
+
             # Gráfico de distribuição de idade
             df_pac = pd.DataFrame(st.session_state.pacientes)
             st.line_chart(df_pac["idade"].value_counts().sort_index())
         else:
             st.warning("Nenhum paciente cadastrado.")
-    
+
     # TAB 3: Consultas por Especialidade
     with tab3:
         st.subheader("Quantidade de Consultas por Especialidade")
@@ -602,13 +625,13 @@ def tela_consultas_avancadas():
                 medico = get_medico_por_id(c["id_medico"])
                 esp = medico["especialidade"] if medico else "N/A"
                 dados[esp] = dados.get(esp, 0) + 1
-            
+
             df = pd.DataFrame(list(dados.items()), columns=["Especialidade", "Quantidade"])
             st.bar_chart(df.set_index("Especialidade"))
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.warning("Nenhuma consulta para exibir.")
-    
+
     # TAB 4: Intervalo de Datas
     with tab4:
         st.subheader("Consultas em Intervalo de Datas")
@@ -617,13 +640,13 @@ def tela_consultas_avancadas():
             data_inicio = st.date_input("Data Inicial")
         with col2:
             data_fim = st.date_input("Data Final")
-        
+
         if st.button("Filtrar"):
             consultas_filtradas = [
                 c for c in st.session_state.consultas
                 if data_inicio <= c["data"].date() <= data_fim
             ]
-            
+
             if consultas_filtradas:
                 dados = []
                 for c in consultas_filtradas:
@@ -636,14 +659,14 @@ def tela_consultas_avancadas():
                         "Descrição": c["descricao"]
                     })
                 df = pd.DataFrame(dados)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width='stretch', hide_index=True)
             else:
                 st.warning("Nenhuma consulta neste período.")
-    
+
     # TAB 5: Resumo Geral
     with tab5:
         st.subheader("Resumo Geral do Sistema")
-        
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total de Pacientes", len(st.session_state.pacientes))
@@ -651,9 +674,9 @@ def tela_consultas_avancadas():
             st.metric("Total de Médicos", len(st.session_state.medicos))
         with col3:
             st.metric("Total de Consultas", len(st.session_state.consultas))
-        
+
         st.markdown("---")
-        
+
         # Pacientes com mais consultas
         st.subheader("Top 5 Pacientes com Mais Consultas")
         pacientes_consultas = {}
@@ -661,7 +684,7 @@ def tela_consultas_avancadas():
             paciente = get_paciente_por_id(c["id_paciente"])
             nome = paciente["nome"] if paciente else "N/A"
             pacientes_consultas[nome] = pacientes_consultas.get(nome, 0) + 1
-        
+
         if pacientes_consultas:
             df_top = pd.DataFrame(
                 sorted(pacientes_consultas.items(), key=lambda x: x[1], reverse=True)[:5],
@@ -670,10 +693,10 @@ def tela_consultas_avancadas():
             st.bar_chart(df_top.set_index("Paciente"))
         else:
             st.info("Sem dados para exibir.")
-
 # ============================================================================
 # NAVEGAÇÃO PRINCIPAL
 # ============================================================================
+
 
 st.sidebar.markdown("# 🏥 Menu Principal")
 pagina = st.sidebar.radio(

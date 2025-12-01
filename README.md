@@ -56,5 +56,3 @@ streamlit run app_streamlit.py
 
 - Erro de conexão: verifique usuário/senha e se o servidor MySQL está rodando.
 - Permissões: o usuário MySQL precisa de privilégios para criar schema e tabelas ao rodar o script SQL.
-
-Se quiser, eu posso adicionar suporte a variáveis de ambiente e um `.env` para facilitar a configuração.
