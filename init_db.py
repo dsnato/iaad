@@ -2,6 +2,10 @@ import mysql.connector
 import argparse
 import sys
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def execute_sql_file(conn, path):
     cur = conn.cursor()
@@ -32,12 +36,13 @@ def execute_sql_file(conn, path):
     cur.close()
     conn.commit()
 
+
 def main():
     parser = argparse.ArgumentParser(description="Importa um .sql no MySQL (tratamento de DELIMITER).")
-    parser.add_argument('--host', default='127.0.0.1')
-    parser.add_argument('--port', type=int, default=3306)
-    parser.add_argument('--user', required=True)
-    parser.add_argument('--password', required=True)
+    parser.add_argument('--host', default=os.getenv('DB_HOST', 'localhost'))
+    parser.add_argument('--port', type=int, default=int(os.getenv('DB_PORT', 3306)))
+    parser.add_argument('--user', default=os.getenv('DB_USER', 'root'))
+    parser.add_argument('--password', default=os.getenv('DB_PASSWORD', ''))
     parser.add_argument('--file', default='consultas_medicas.sql')
     args = parser.parse_args()
 
@@ -46,7 +51,13 @@ def main():
         sys.exit(2)
 
     try:
-        conn = mysql.connector.connect(host=args.host, port=args.port, user=args.user, password=args.password, autocommit=False)
+        conn = mysql.connector.connect(
+            host=args.host,
+            port=args.port,
+            user=args.user,
+            password=args.password,
+            autocommit=False
+        )
     except mysql.connector.Error as e:
         print(f"Falha ao conectar ao MySQL: {e}", file=sys.stderr)
         sys.exit(1)
@@ -60,6 +71,7 @@ def main():
         sys.exit(3)
     finally:
         conn.close()
+
 
 if __name__ == '__main__':
     main()
