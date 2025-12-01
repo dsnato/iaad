@@ -375,7 +375,7 @@ def tela_medicos():
         st.subheader("Lista de Médicos")
         if st.session_state.medicos:
             df = pd.DataFrame(st.session_state.medicos)
-            st.dataframe(df, width='stretch')
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.warning("Nenhum médico cadastrado.")
 
