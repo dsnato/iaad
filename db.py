@@ -3,9 +3,6 @@ import re
 import mysql.connector
 from mysql.connector import Error
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class ValidationError(Exception):
@@ -100,12 +97,17 @@ class MySQLDB:
             raise ValidationError("E-mail inválido.")
         return True
 
-    def validate_phone(self, phone: str):
+    def validate_phone(self, phone: str, is_clinica: bool = False):
         if phone is None or phone == '':
-            return True
-        pattern = r'^\([0-9]{2}\)\s*[0-9]{4,5}-[0-9]{4}$'
+            raise ValidationError("Telefone é obrigatório.")
+        if is_clinica:
+            pattern = r'^\([0-9]{2}\)\s*[0-9]{4}-[0-9]{4}$'
+            msg = "Telefone inválido. Formato esperado: (DD) XXXX-XXXX"
+        else:
+            pattern = r'^\([0-9]{2}\)\s*[0-9]{5}-[0-9]{4}$'
+            msg = "Telefone inválido. Formato esperado: (DD) XXXXX-XXXX"
         if not re.match(pattern, phone):
-            raise ValidationError("Telefone inválido. Formato esperado: (DD) XXXX-XXXX ou (DD) XXXXX-XXXX")
+            raise ValidationError(msg)
         return True
 
     def _parse_datetime(self, value):
@@ -147,11 +149,17 @@ class MySQLDB:
 
     def create_cliente(
         self, cpf: str, nome: str, data_nascimento: str,
-        genero: str = None, telefone: str = None, email: str = None
+        genero: str, telefone: str, email: str
     ):
+        if not nome:
+            raise ValidationError("Nome é obrigatório.")
+        if not genero or genero not in ('M', 'F'):
+            raise ValidationError("Gênero é obrigatório e deve ser 'M' ou 'F'.")
         self.validate_cpf(cpf)
         self.validate_email(email)
-        self.validate_phone(telefone)
+        if not email:
+            raise ValidationError("Email é obrigatório.")
+        self.validate_phone(telefone, is_clinica=False)
         dt = self._parse_datetime(data_nascimento)
         sql = """
         INSERT INTO Paciente (CpfPaciente, NomePac, DataNascimento, Genero, Telefone, Email)
@@ -161,7 +169,7 @@ class MySQLDB:
             self._execute(
                 sql,
                 params=(cpf, nome, dt.date().isoformat(),
-                        genero or '', telefone or '', email or ''),
+                        genero, telefone, email),
                 commit=True
             )
             return True
@@ -174,16 +182,24 @@ class MySQLDB:
     ):
         if not cpf:
             raise ValidationError("CPF do cliente obrigatório para atualização.")
+        if genero is not None and genero not in ('M', 'F', ''):
+            raise ValidationError("Gênero deve ser 'M' ou 'F'.")
         if email is not None:
+            if email == '':
+                raise ValidationError("Email não pode ser vazio.")
             self.validate_email(email)
         if telefone is not None:
-            self.validate_phone(telefone)
+            if telefone == '':
+                raise ValidationError("Telefone não pode ser vazio.")
+            self.validate_phone(telefone, is_clinica=False)
         if data_nascimento is not None:
             dt = self._parse_datetime(data_nascimento)
             data_nascimento = dt.date().isoformat()
         sets = []
         params = []
         if nome is not None:
+            if nome == '':
+                raise ValidationError("Nome não pode ser vazio.")
             sets.append("NomePac = %s")
             params.append(nome)
         if data_nascimento is not None:
@@ -340,13 +356,19 @@ class MySQLDB:
         row = self._execute(sql, params=(codcli,), fetchone=True)
         return row
 
-    def create_clinica(self, codcli: str, nome: str, endereco: str = None, telefone: str = None, email: str = None):
+    def create_clinica(self, codcli: str, nome: str, endereco: str, telefone: str, email: str):
         self._validate_codcli(codcli)
+        if not nome:
+            raise ValidationError("Nome é obrigatório.")
+        if not endereco:
+            raise ValidationError("Endereço é obrigatório.")
+        if not email:
+            raise ValidationError("Email é obrigatório.")
         self.validate_email(email)
-        self.validate_phone(telefone)
+        self.validate_phone(telefone, is_clinica=True)
         sql = "INSERT INTO Clinica (CodCli, NomeCli, Endereco, Telefone, Email) VALUES (%s, %s, %s, %s, %s)"
         try:
-            self._execute(sql, params=(codcli, nome, endereco or '', telefone or '', email or ''), commit=True)
+            self._execute(sql, params=(codcli, nome, endereco, telefone, email), commit=True)
             return True
         except Error:
             raise
@@ -354,15 +376,23 @@ class MySQLDB:
     def update_clinica(self, codcli: str, nome: str = None, endereco: str = None, telefone: str = None, email: str = None):
         self._validate_codcli(codcli)
         if email is not None:
+            if email == '':
+                raise ValidationError("Email não pode ser vazio.")
             self.validate_email(email)
         if telefone is not None:
-            self.validate_phone(telefone)
+            if telefone == '':
+                raise ValidationError("Telefone não pode ser vazio.")
+            self.validate_phone(telefone, is_clinica=True)
         sets = []
         params = []
         if nome is not None:
+            if nome == '':
+                raise ValidationError("Nome não pode ser vazio.")
             sets.append("NomeCli = %s")
             params.append(nome)
         if endereco is not None:
+            if endereco == '':
+                raise ValidationError("Endereço não pode ser vazio.")
             sets.append("Endereco = %s")
             params.append(endereco)
         if telefone is not None:
@@ -401,6 +431,7 @@ class MySQLDB:
         SELECT
             CodMed AS codmed,
             NomeMed AS nome,
+            Genero AS genero,
             Especialidade AS especialidade,
             Telefone AS telefone,
             Email AS email
@@ -413,40 +444,77 @@ class MySQLDB:
     def get_medico_por_id(self, codmed: str):
         self._validate_codmed(codmed)
         sql = (
-            "SELECT CodMed AS codmed, NomeMed AS nome, "
+            "SELECT CodMed AS codmed, NomeMed AS nome, Genero AS genero, "
             "Especialidade AS especialidade, Telefone AS telefone, "
             "Email AS email FROM Medico WHERE CodMed = %s"
         )
         row = self._execute(sql, params=(codmed,), fetchone=True)
         return row
 
-    def create_medico(self, codmed: str, nome: str, especialidade: str = None, telefone: str = None, email: str = None):
+    def create_medico(self, codmed: str, nome: str, genero: str, especialidade: str, telefone: str, email: str):
         self._validate_codmed(codmed)
+        if not nome:
+            raise ValidationError("Nome é obrigatório.")
+        if not genero or genero not in ('M', 'F'):
+            raise ValidationError("Gênero é obrigatório e deve ser 'M' ou 'F'.")
+        if not especialidade:
+            raise ValidationError("Especialidade é obrigatória.")
+        if not email:
+            raise ValidationError("Email é obrigatório.")
         self.validate_email(email)
-        self.validate_phone(telefone)
-        sql = "INSERT INTO Medico (CodMed, NomeMed, Especialidade, Telefone, Email) VALUES (%s, %s, %s, %s, %s)"
+        self.validate_phone(telefone, is_clinica=False)
+        sql = "INSERT INTO Medico (CodMed, NomeMed, Genero, Telefone, Email, Especialidade) VALUES (%s, %s, %s, %s, %s, %s)"
         try:
-            self._execute(sql, params=(codmed, nome, especialidade or '', telefone or '', email or ''), commit=True)
+            self._execute(sql, params=(codmed, nome, genero, telefone, email, especialidade), commit=True)
             return True
         except Error:
             raise
 
     def update_medico(
-        self, codmed: str, nome: str = None, especialidade: str = None,
+        self, codmed: str, nome: str = None, genero: str = None, especialidade: str = None,
         telefone: str = None, email: str = None
     ):
         self._validate_codmed(codmed)
+        if genero is not None and genero not in ('M', 'F', ''):
+            raise ValidationError("Gênero deve ser 'M' ou 'F'.")
         if email is not None:
+            if email == '':
+                raise ValidationError("Email não pode ser vazio.")
             self.validate_email(email)
         if telefone is not None:
-            self.validate_phone(telefone)
+            if telefone == '':
+                raise ValidationError("Telefone não pode ser vazio.")
+            self.validate_phone(telefone, is_clinica=False)
         sets = []
         params = []
         if nome is not None:
+            if nome == '':
+                raise ValidationError("Nome não pode ser vazio.")
             sets.append("NomeMed = %s")
             params.append(nome)
+        if genero is not None:
+            sets.append("Genero = %s")
+            params.append(genero)
         if especialidade is not None:
+            if especialidade == '':
+                raise ValidationError("Especialidade não pode ser vazia.")
             sets.append("Especialidade = %s")
+            params.append(especialidade)
+        if telefone is not None:
+            sets.append("Telefone = %s")
+            params.append(telefone)
+        if email is not None:
+            sets.append("Email = %s")
+            params.append(email)
+        if not sets:
+            return 0
+        sql = f"UPDATE Medico SET {', '.join(sets)} WHERE CodMed = %s"
+        params.append(codmed)
+        try:
+            self._execute(sql, params=tuple(params), commit=True)
+            return True
+        except Error:
+            raiseappend("Especialidade = %s")
             params.append(especialidade)
         if telefone is not None:
             sets.append("Telefone = %s")
