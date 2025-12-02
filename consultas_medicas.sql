@@ -165,199 +165,31 @@ FROM Medico m
 LEFT JOIN Consulta c ON m.CodMed = c.CodMed
 GROUP BY m.CodMed, m.NomeMed, m.Especialidade;
 
--- TRIGGERS
--- VALIDAÇÃO DE CPF DO PACIENTE
-DROP TRIGGER IF EXISTS trg_validar_cpf_paciente_ins;
-DELIMITER $$
-CREATE TRIGGER trg_validar_cpf_paciente_ins
-BEFORE INSERT ON Paciente
+-- TRIGGER
+DROP TRIGGER IF EXISTS trg_verifica_intervalo_agendamento;
+DELIMITER $$ 
+CREATE TRIGGER tg_verifica_intervalo_agendamento
+BEFORE INSERT ON Consulta
 FOR EACH ROW
 BEGIN
-    -- CPF deve estar exatamente no formato XXX.XXX.XXX-XX
-    IF NEW.CpfPaciente NOT REGEXP '^[0-9]{3}\\.[0-9]{3}\\.[0-9]{3}-[0-9]{2}$' THEN
+    IF TIMESTAMPDIFF(DAY, CURDATE(), NEW.Data_Hora) > 60 THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'CPF inválido. Formato obrigatório: XXX.XXX.XXX-XX';
-    END IF;
-END$$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_validar_cpf_paciente_upd;
-DELIMITER $$
-CREATE TRIGGER trg_validar_cpf_paciente_upd
-BEFORE UPDATE ON Paciente
-FOR EACH ROW
-BEGIN
-    IF NEW.CpfPaciente NOT REGEXP '^[0-9]{3}\\.[0-9]{3}\\.[0-9]{3}-[0-9]{2}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'CPF inválido. Formato obrigatório: XXX.XXX.XXX-XX';
-    END IF;
-END$$
-DELIMITER ;
-
--- VALIDAÇÃO DE E-MAIL DA CLINICA
-DROP TRIGGER IF EXISTS trg_valida_email_clinica;
-DELIMITER $$
-CREATE TRIGGER trg_valida_email_clinica
-BEFORE INSERT ON Clinica
-FOR EACH ROW
-BEGIN
-    -- Verifica presença de @ e .
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail da clínica em formato inválido.';
+            SET MESSAGE_TEXT = 'A consulta só pode ser agendada com no máximo 2 meses de antecedência.';
     END IF;
 END $$
 DELIMITER ;
 
-DROP TRIGGER IF EXISTS trg_valida_email_clinica_upd;
+DROP TRIGGER IF EXISTS trg_verifica_intervalo_agendamento_upd
 DELIMITER $$
-CREATE TRIGGER trg_valida_email_clinica_upd
-BEFORE UPDATE ON Clinica
+CREATE TRIGGER tg_verifica_intervalo_agendamento_upd
+BEFORE UPDATE ON Consulta
 FOR EACH ROW
 BEGIN
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
+    IF TIMESTAMPDIFF(DAY, CURDATE(), NEW.Data_Hora) > 60 THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail da clínica em formato inválido.';
+            SET MESSAGE_TEXT = 'A consulta só pode ser agendada com no máximo 2 meses de antecedência.';
     END IF;
 END $$
-DELIMITER ;
-
-
--- VALIDAÇÃO DE E-MAIL DO PACIENTE
-DROP TRIGGER IF EXISTS trg_valida_email_paciente;
-DELIMITER $$
-CREATE TRIGGER trg_valida_email_paciente
-BEFORE INSERT ON Paciente
-FOR EACH ROW
-BEGIN
-    -- Verifica presença de @ e .
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail do paciente em formato inválido.';
-    END IF;
-END $$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_valida_email_paciente_upd;
-DELIMITER $$
-CREATE TRIGGER trg_valida_email_paciente_upd
-BEFORE UPDATE ON Paciente
-FOR EACH ROW
-BEGIN
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail do paciente em formato inválido.';
-    END IF;
-END $$
-DELIMITER ;
-
--- VALIDAÇÃO DE E-MAIL DO MÉDICO
-DROP TRIGGER IF EXISTS trg_valida_email_medico;
-DELIMITER $$
-CREATE TRIGGER trg_valida_email_medico
-BEFORE INSERT ON Medico
-FOR EACH ROW
-BEGIN
-    -- Verifica presença de @ e .
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail do médico em formato inválido.';
-    END IF;
-END $$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_valida_email_medico_upd;
-DELIMITER $$
-CREATE TRIGGER trg_valida_email_medico_upd
-BEFORE UPDATE ON Medico
-FOR EACH ROW
-BEGIN
-    IF NEW.Email NOT LIKE '%_@_%._%' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'E-mail do médico em formato inválido.';
-    END IF;
-END $$
-DELIMITER ;
-
--- VALIDAÇÃO DO TELEFONE DA CLÍNICA
-DROP TRIGGER IF EXISTS trg_validar_telefone_clinica_ins;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_clinica_ins
-BEFORE INSERT ON Clinica
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{4}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone da clínica inválido. Formato esperado: (DD) XXXX-XXXX';
-    END IF;
-END$$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_validar_telefone_clinica_upd;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_clinica_upd
-BEFORE UPDATE ON Clinica
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{4}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone da clínica inválido. Formato esperado: (DD) XXXX-XXXX';
-    END IF;
-END$$
-DELIMITER ;
-
--- VALIDAÇÃO DE TELEFONE DO MÉDICO
-DROP TRIGGER IF EXISTS trg_validar_telefone_medico_ins;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_medico_ins
-BEFORE INSERT ON Medico
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{5}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone do médico inválido. Formato esperado: (DD) XXXXX-XXXX';
-    END IF;
-END$$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_validar_telefone_medico_upd;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_medico_upd
-BEFORE UPDATE ON Medico
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{5}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone do médico inválido. Formato esperado: (DD) XXXXX-XXXX';
-    END IF;
-END$$
-DELIMITER ;
-
--- VALIDAÇÃO DO TELEFONE DO PACIENTE
-DROP TRIGGER IF EXISTS trg_validar_telefone_paciente_ins;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_paciente_ins
-BEFORE INSERT ON Paciente
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{5}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone do paciente inválido. Formato esperado: (DD) XXXXX-XXXX';
-    END IF;
-END$$
-DELIMITER ;
-
-DROP TRIGGER IF EXISTS trg_validar_telefone_paciente_upd;
-DELIMITER $$
-CREATE TRIGGER trg_validar_telefone_paciente_upd
-BEFORE UPDATE ON Paciente
-FOR EACH ROW
-BEGIN
-    IF TRIM(NEW.Telefone) NOT RLIKE '^\\([0-9]{2}\\)[[:space:]]*[0-9]{5}-[0-9]{4}$' THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Telefone do paciente inválido. Formato esperado: (DD) XXXXX-XXXX';
-    END IF;
-END$$
 DELIMITER ;
 
 COMMIT;
