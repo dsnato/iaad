@@ -374,6 +374,7 @@ def tela_pacientes():
                 if paciente:
                     with st.form("form_editar_paciente"):
                         nome = st.text_input("Nome", value=paciente["nome"])
+                        from datetime import datetime
                         data_nasc = datetime.strptime(str(paciente["data_nascimento"]), "%Y-%m-%d").date()
                         data_nascimento = st.date_input("Data de Nascimento", value=data_nasc)
                         genero = st.selectbox("Gênero", ["M", "F"], index=0 if paciente["genero"] == "M" else 1)
