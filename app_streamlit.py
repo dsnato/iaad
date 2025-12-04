@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import List, Dict, Optional
 from db import MySQLDB
 
 # ============================================================================
