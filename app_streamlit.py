@@ -765,20 +765,35 @@ def tela_consultas():
         try:
             consultas = db.get_pedidos()
             if consultas:
-                opcoes = [f"{c['CodCli']}-{c['CodMed']}-{c['CpfPaciente']} - {c['Data_Hora']} - {c['paciente_nome']}" for c in consultas]
+                # Criar índice para mapear seleção à consulta completa
+                opcoes = []
+                for idx, c in enumerate(consultas):
+                    # Formatar data/hora para exibição
+                    data_hora_str = str(c['Data_Hora']) if c['Data_Hora'] else "N/A"
+                    opcoes.append(f"{idx}|{c['clinica_nome']} - {c['medico_nome']} - {c['paciente_nome']} ({data_hora_str})")
+                
                 sel = st.selectbox("Selecione consulta", opcoes, key="sel_deletar_cons")
-
-                # Parse a seleção
-                parts = sel.split(" - ")
-                ids = parts[0].split("-")
-                codcli = ids[0]
-                codmed = ids[1]
-                cpf = ids[2]
-                data_hora = parts[1]
+                
+                # Extrair índice da seleção
+                idx = int(sel.split("|")[0])
+                consulta_selecionada = consultas[idx]
+                
+                # Exibir detalhes da consulta
+                st.info(f"""
+                **Clínica:** {consulta_selecionada['clinica_nome']} ({consulta_selecionada['CodCli']})  
+                **Médico:** {consulta_selecionada['medico_nome']} ({consulta_selecionada['CodMed']})  
+                **Paciente:** {consulta_selecionada['paciente_nome']} ({consulta_selecionada['CpfPaciente']})  
+                **Data/Hora:** {consulta_selecionada['Data_Hora']}
+                """)
 
                 if st.button("🗑️ Deletar Consulta", key="btn_deletar_cons"):
                     try:
-                        db.delete_pedido(codcli, codmed, cpf, data_hora)
+                        db.delete_pedido(
+                            consulta_selecionada['CodCli'],
+                            consulta_selecionada['CodMed'],
+                            consulta_selecionada['CpfPaciente'],
+                            consulta_selecionada['Data_Hora']
+                        )
                         st.success("✅ Consulta deletada com sucesso!")
                         st.rerun()
                     except Exception as e:
