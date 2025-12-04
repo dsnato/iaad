@@ -1173,7 +1173,7 @@ def tela_consultas_avancadas():
                         st.metric("👥 Total de Pacientes", total_pac)
                     with col2:
                         idade_media = sum([d['idade_media'] * d['total_pacientes'] for d in dados]) / total_pac if total_pac > 0 else 0
-                        st.metric("📊 Idade Média Geral", f"{idade_media:.1f} anos")
+                        st.metric("📊 Idade Média Geral", f"{int(idade_media)} anos")
                     with col3:
                         st.metric("📋 Grupos por Gênero", len(dados))
 
