@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ============================================================================
-# INICIALIZAÇÃO DO BANCO DE DADOS
+# DADOS MOCKADOS (EM MEMÓRIA) - USANDO SESSION STATE
 # ============================================================================
 
 
@@ -45,21 +45,17 @@ if "pacientes" not in st.session_state:
         {"id": 2, "nome": "Maria Santos", "idade": 32, "endereco": "Rua B, 456"},
     ]
 
-if "medicos" not in st.session_state:
-    st.session_state.medicos = [
-        {"id": 1, "nome": "Dr. Carlos", "especialidade": "Cardiologia"},
-        {"id": 2, "nome": "Dra. Ana", "especialidade": "Dermatologia"},
+if 'medicos_data' not in st.session_state:
+    st.session_state.medicos_data = [
+        {"codmed": "M001", "nome": "Dr. Carlos Oliveira", "genero": "M", "especialidade": "Cardiologia", "telefone": "(81) 98888-1111", "email": "carlos@clinica.com"},
+        {"codmed": "M002", "nome": "Dra. Ana Paula", "genero": "F", "especialidade": "Pediatria", "telefone": "(81) 98888-2222", "email": "ana@clinica.com"},
+        {"codmed": "M003", "nome": "Dr. Roberto Lima", "genero": "M", "especialidade": "Ortopedia", "telefone": "(81) 98888-3333", "email": "roberto@clinica.com"},
     ]
 
-if "consultas" not in st.session_state:
-    st.session_state.consultas = [
-        {
-            "id": 1,
-            "id_paciente": 1,
-            "id_medico": 1,
-            "data": datetime.now() - timedelta(days=5),
-            "descricao": "Avaliação cardiológica de rotina"
-        }
+if 'clinicas_data' not in st.session_state:
+    st.session_state.clinicas_data = [
+        {"codcli": "C001", "nome": "Clínica Saúde Total", "endereco": "Rua das Flores, 123", "telefone": "(81) 3333-4444", "email": "contato@saudetotal.com"},
+        {"codcli": "C002", "nome": "Clínica Vida", "endereco": "Av. Principal, 456", "telefone": "(81) 3333-5555", "email": "contato@clinicavida.com"},
     ]
 
 if "log_acoes" not in st.session_state:
@@ -205,7 +201,7 @@ def deletar_medico(id_medico: int) -> bool:
     return True
 
 # ============================================================================
-# FUNÇÕES HELPER - CONSULTAS
+# FUNÇÕES HELPER
 # ============================================================================
 
 
@@ -267,9 +263,9 @@ def get_consulta_por_id(id_consulta: int) -> Optional[Dict]:
             return c
     return None
 
-# ============================================================================
-# FUNÇÕES HELPER - LOG (TRIGGER)
-# ============================================================================
+def get_consultas():
+    """Retorna todas as consultas."""
+    return st.session_state.consultas_data
 
 
 def registrar_log(mensagem: str):
@@ -333,9 +329,8 @@ def tela_home():
         Este é um sistema completo de gerenciamento de consultas médicas com:
         - ✅ CRUD completo para Pacientes, Médicos, Clínicas e Consultas
         - ✅ Validação de integridade referencial
-        - ✅ Sistema de Log com Triggers do MySQL
-        - ✅ Consultas avançadas e gráficos
-        - ✅ Banco de dados MySQL persistente
+        - ✅ Banco de dados MySQL com triggers
+        - ✅ Consultas avançadas e relatórios
         """
     )
 
@@ -371,8 +366,8 @@ def tela_pacientes():
             nome = st.text_input("Nome", placeholder="Ex: João Silva")
             data_nascimento = st.date_input("Data de Nascimento", format="DD/MM/YYYY", min_value=datetime(1900, 1, 1), max_value=datetime.today())
             genero = st.selectbox("Gênero", ["M", "F"])
-            telefone = st.text_input("Telefone", placeholder="(81) 98888-1111")
-            email = st.text_input("E-mail", placeholder="paciente@email.com")
+            telefone = st.text_input("Telefone", placeholder="(DD) XXXXX-XXXX", max_chars=15)
+            email = st.text_input("Email", placeholder="exemplo@mail.com", max_chars=40)
             submitted = st.form_submit_button("Salvar Paciente")
 
         if submitted:
@@ -468,8 +463,8 @@ def tela_medicos():
     with tab2:
         st.subheader("Criar Novo Médico")
         with st.form("form_criar_medico"):
-            codmed = st.text_input("Código do Médico", placeholder="Ex: M001")
-            nome = st.text_input("Nome", placeholder="Ex: Dr. Carlos Oliveira")
+            codmed = st.text_input("Código do Médico", placeholder="Ex: 1234567", max_chars=7)
+            nome = st.text_input("Nome Completo", placeholder="Ex: Dr. João Silva", max_chars=60)
             genero = st.selectbox("Gênero", ["M", "F"])
             especialidade = st.selectbox(
                 "Especialidade",
@@ -572,11 +567,11 @@ def tela_clinicas():
     with tab2:
         st.subheader("Criar Nova Clínica")
         with st.form("form_criar_clinica"):
-            codcli = st.text_input("Código da Clínica", placeholder="Ex: 0000001")
-            nome = st.text_input("Nome", placeholder="Ex: Clínica Saúde Plus")
-            endereco = st.text_input("Endereço", placeholder="Ex: Av. Rosa e Silva, 406")
-            telefone = st.text_input("Telefone", placeholder="(81) 4002-3633")
-            email = st.text_input("E-mail", placeholder="clinica@email.com")
+            codcli = st.text_input("Código da Clínica", placeholder="Ex: 0000001", max_chars=7)
+            nome = st.text_input("Nome da Clínica", placeholder="Ex: Clínica Saúde", max_chars=20)
+            endereco = st.text_input("Endereço", placeholder="Rua, número, bairro", max_chars=50)
+            telefone = st.text_input("Telefone", placeholder="(DD) XXXX-XXXX", max_chars=14)
+            email = st.text_input("Email", placeholder="contato@clinica.com", max_chars=40)
             submitted = st.form_submit_button("Salvar Clínica")
 
         if submitted:
@@ -1299,7 +1294,7 @@ elif pagina == "Consultas Avançadas":
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📌 Informações")
 st.sidebar.info(
-    "Sistema de Consultas Médicas v2.0\n\n"
-    "Conectado ao MySQL\n\n"
-    "Dados persistentes no banco de dados."
+    "Sistema de Consultas Médicas v1.0\n\n"
+    "Banco de dados MySQL\n\n"
+    "Desenvolvido com Streamlit"
 )
