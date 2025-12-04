@@ -514,22 +514,6 @@ class MySQLDB:
             self._execute(sql, params=tuple(params), commit=True)
             return True
         except Error:
-            raiseappend("Especialidade = %s")
-            params.append(especialidade)
-        if telefone is not None:
-            sets.append("Telefone = %s")
-            params.append(telefone)
-        if email is not None:
-            sets.append("Email = %s")
-            params.append(email)
-        if not sets:
-            return 0
-        sql = f"UPDATE Medico SET {', '.join(sets)} WHERE CodMed = %s"
-        params.append(codmed)
-        try:
-            self._execute(sql, params=tuple(params), commit=True)
-            return True
-        except Error:
             raise
 
     def delete_medico(self, codmed: str):
