@@ -21,7 +21,13 @@ st.set_page_config(
 def init_db():
     """Inicializa a conexão com o banco de dados."""
     try:
-        db = MySQLDB()
+        db = MySQLDB(
+            host='localhost',
+            user='root',
+            password='',  # <--- ALTERE AQUI se sua senha for diferente
+            database='consultas_medicas',
+            port=3306
+        )
         db.connect()
         return db
     except Exception as e:
@@ -332,7 +338,7 @@ def tela_pacientes():
             pacientes = db.get_clientes()  # No db.py, pacientes são chamados de clientes
             if pacientes:
                 df = pd.DataFrame(pacientes)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
             else:
                 st.warning("Nenhum paciente cadastrado.")
         except Exception as e:
@@ -354,6 +360,7 @@ def tela_pacientes():
             try:
                 db.create_cliente(cpf, nome, data_nascimento.isoformat(), genero, telefone, email)
                 st.success(f"✅ Paciente '{nome}' criado com sucesso!")
+                registrar_log(f"Paciente '{nome}' criado com CPF {cpf}")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Erro ao criar paciente: {str(e)}")
@@ -386,6 +393,7 @@ def tela_pacientes():
                         try:
                             db.update_cliente(cpf_selecionado, nome, data_nascimento.isoformat(), genero, telefone, email)
                             st.success("✅ Paciente atualizado com sucesso!")
+                            registrar_log(f"Paciente CPF {cpf_selecionado} atualizado")
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Erro ao atualizar paciente: {str(e)}")
@@ -408,6 +416,7 @@ def tela_pacientes():
                     try:
                         db.delete_cliente(cpf_selecionado)
                         st.success("✅ Paciente deletado com sucesso!")
+                        registrar_log(f"Paciente CPF {cpf_selecionado} deletado")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao deletar paciente: {str(e)}")
@@ -433,7 +442,7 @@ def tela_medicos():
             medicos = db.get_medicos()
             if medicos:
                 df = pd.DataFrame(medicos)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
             else:
                 st.warning("Nenhum médico cadastrado.")
         except Exception as e:
@@ -461,6 +470,7 @@ def tela_medicos():
             try:
                 db.create_medico(codmed, nome, genero, especialidade, telefone, email)
                 st.success(f"✅ Médico '{nome}' criado com sucesso!")
+                registrar_log(f"Médico '{nome}' ({especialidade}) criado com código {codmed}")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Erro ao criar médico: {str(e)}")
@@ -489,6 +499,7 @@ def tela_medicos():
                         try:
                             db.update_medico(codmed_selecionado, nome, genero, especialidade, telefone, email)
                             st.success("✅ Médico atualizado com sucesso!")
+                            registrar_log(f"Médico código {codmed_selecionado} atualizado")
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Erro ao atualizar médico: {str(e)}")
@@ -511,6 +522,7 @@ def tela_medicos():
                     try:
                         db.delete_medico(codmed_selecionado)
                         st.success("✅ Médico deletado com sucesso!")
+                        registrar_log(f"Médico código {codmed_selecionado} deletado")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao deletar médico: {str(e)}")
@@ -536,7 +548,7 @@ def tela_clinicas():
             clinicas = db.get_clinicas()
             if clinicas:
                 df = pd.DataFrame(clinicas)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
             else:
                 st.warning("Nenhuma clínica cadastrada.")
         except Exception as e:
@@ -557,6 +569,7 @@ def tela_clinicas():
             try:
                 db.create_clinica(codcli, nome, endereco, telefone, email)
                 st.success(f"✅ Clínica '{nome}' criada com sucesso!")
+                registrar_log(f"Clínica '{nome}' criada com código {codcli}")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Erro ao criar clínica: {str(e)}")
@@ -584,6 +597,7 @@ def tela_clinicas():
                         try:
                             db.update_clinica(codcli_selecionado, nome, endereco, telefone, email)
                             st.success("✅ Clínica atualizada com sucesso!")
+                            registrar_log(f"Clínica código {codcli_selecionado} atualizada")
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Erro ao atualizar clínica: {str(e)}")
@@ -606,6 +620,7 @@ def tela_clinicas():
                     try:
                         db.delete_clinica(codcli_selecionado)
                         st.success("✅ Clínica deletada com sucesso!")
+                        registrar_log(f"Clínica código {codcli_selecionado} deletada")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao deletar clínica: {str(e)}")
@@ -631,7 +646,7 @@ def tela_consultas():
             consultas = db.get_pedidos()  # No db.py, consultas são chamadas de pedidos
             if consultas:
                 df = pd.DataFrame(consultas)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
             else:
                 st.warning("Nenhuma consulta cadastrada.")
         except Exception as e:
@@ -672,6 +687,7 @@ def tela_consultas():
                         data_hora = datetime.combine(data_consulta, hora_consulta)
                         db.create_pedido(codcli, codmed, cpf, data_hora)
                         st.success("✅ Consulta criada com sucesso!")
+                        registrar_log(f"Consulta criada: Paciente {cpf}, Médico {codmed}, Clínica {codcli}")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao criar consulta: {str(e)}")
@@ -731,6 +747,7 @@ def tela_consultas():
                         }
                         db.update_pedido(old_keys, new_values)
                         st.success("✅ Consulta atualizada com sucesso!")
+                        registrar_log(f"Consulta atualizada: Paciente {cpf_new}, Médico {codmed_new}")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao atualizar consulta: {str(e)}")
@@ -760,6 +777,7 @@ def tela_consultas():
                     try:
                         db.delete_pedido(codcli, codmed, cpf, data_hora)
                         st.success("✅ Consulta deletada com sucesso!")
+                        registrar_log(f"Consulta deletada: Paciente {cpf}, Médico {codmed}")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erro ao deletar consulta: {str(e)}")
@@ -778,7 +796,7 @@ def tela_triggers():
     
     if st.session_state.log_acoes:
         df_log = pd.DataFrame(st.session_state.log_acoes)
-        st.dataframe(df_log, use_container_width=True, hide_index=True)
+        st.dataframe(df_log, width='stretch', hide_index=True)
         
         if st.button("🗑️ Limpar Log"):
             st.session_state.log_acoes = []
@@ -853,7 +871,7 @@ def tela_consultas_avancadas():
                     'total_medicos_atendendo': 'Médicos',
                     'total_pacientes_atendidos': 'Pacientes'
                 })
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.dataframe(df_display, width='stretch', hide_index=True)
             else:
                 st.info("Nenhum dado disponível.")
         except Exception as e:
@@ -887,7 +905,7 @@ def tela_consultas_avancadas():
                     'total_consultas': 'Total Consultas',
                     'pacientes_unicos': 'Pacientes Únicos'
                 })
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.dataframe(df_display, width='stretch', hide_index=True)
             else:
                 st.info("Nenhum dado disponível.")
         except Exception as e:
@@ -950,7 +968,7 @@ def tela_consultas_avancadas():
                     'clinica': 'Clínica',
                     'dias_ate_consulta': 'Dias'
                 })
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.dataframe(df_display, width='stretch', hide_index=True)
             else:
                 st.info(f"Nenhuma consulta agendada para os próximos {dias} dias.")
         except Exception as e:
@@ -995,7 +1013,7 @@ def tela_consultas_avancadas():
                     'medicos_ativos': 'Médicos',
                     'pacientes_atendidos': 'Pacientes'
                 })
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.dataframe(df_display, width='stretch', hide_index=True)
             else:
                 st.info(f"Sem dados para o ano de {ano}.")
         except Exception as e:
@@ -1034,7 +1052,7 @@ def tela_consultas_avancadas():
                     'pacientes_unicos': 'Pacientes Únicos',
                     'medicos_especialidade': 'Médicos'
                 })
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.dataframe(df_display, width='stretch', hide_index=True)
             else:
                 st.info("Nenhum dado disponível.")
         except Exception as e:
@@ -1082,7 +1100,7 @@ def tela_consultas_avancadas():
                         'idade_minima': 'Idade Mín.',
                         'idade_maxima': 'Idade Máx.'
                     })
-                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+                    st.dataframe(df_display, width='stretch', hide_index=True)
                 else:
                     st.info("Nenhum dado disponível.")
             except Exception as e:
@@ -1105,7 +1123,7 @@ def tela_consultas_avancadas():
                         'email': 'E-mail',
                         'idade': 'Idade'
                     })
-                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+                    st.dataframe(df_display, width='stretch', hide_index=True)
                 else:
                     st.success("✅ Todos os pacientes têm pelo menos uma consulta!")
             except Exception as e:
