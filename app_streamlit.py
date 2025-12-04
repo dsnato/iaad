@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
 from typing import Dict, Optional
-from db import MySQLDB, ValidationError
 
 # ============================================================================
 # CONFIGURAÇÃO STREAMLIT
@@ -14,32 +13,7 @@ st.set_page_config(
 )
 
 # ============================================================================
-# CONEXÃO COM BANCO DE DADOS
-# ============================================================================
-@st.cache_resource
-def get_db():
-    """Retorna instância do banco de dados."""
-    try:
-        db = MySQLDB(
-            host='localhost',
-            user='root',
-            password='',  # Ajuste se necessário
-            database='consultas_medicas',
-            port=3306
-        )
-        # Testa conexão
-        db.connect()
-        return db
-    except Exception:
-        # Silenciosamente usa mock se não conectar
-        return None
-
-# Inicializar DB
-db = get_db()
-USE_MOCK = db is None
-
-# ============================================================================
-# DADOS MOCKADOS (FALLBACK SE MYSQL NÃO CONECTAR)
+# DADOS MOCKADOS (EM MEMÓRIA) - USANDO SESSION STATE
 # ============================================================================
 
 # Inicializar dados na sessão
@@ -63,59 +37,32 @@ if 'clinicas_data' not in st.session_state:
         {"codcli": "C002", "nome": "Clínica Vida", "endereco": "Av. Principal, 456", "telefone": "(81) 3333-5555", "email": "contato@clinicavida.com"},
     ]
 
+if 'consultas_data' not in st.session_state:
+    st.session_state.consultas_data = [
+        {"id": 1, "cpf_paciente": "123.456.789-00", "codmed": "M001", "codcli": "C001", "data": "2025-12-10", "hora": "09:00", "status": "Agendada"},
+        {"id": 2, "cpf_paciente": "987.654.321-00", "codmed": "M002", "codcli": "C001", "data": "2025-12-11", "hora": "10:30", "status": "Agendada"},
+        {"id": 3, "cpf_paciente": "456.789.123-00", "codmed": "M003", "codcli": "C002", "data": "2025-12-12", "hora": "14:00", "status": "Confirmada"},
+    ]
+
 # ============================================================================
-# FUNÇÕES HELPER (ABSTRAEM MYSQL OU MOCK)
+# FUNÇÕES HELPER
 # ============================================================================
 
 def get_pacientes():
     """Retorna todos os pacientes."""
-    if USE_MOCK:
-        return st.session_state.pacientes_data
-    try:
-        rows = db.get_clientes()
-        return [{"cpf": r["cpf"], "nome": r["nome"], "data_nascimento": str(r["data_nascimento"]), 
-                 "genero": r["genero"], "telefone": r["telefone"], "email": r["email"]} for r in rows]
-    except Exception as e:
-        st.error(f"Erro ao buscar pacientes: {str(e)}")
-        return []
+    return st.session_state.pacientes_data
 
 def get_medicos():
     """Retorna todos os médicos."""
-    if USE_MOCK:
-        return st.session_state.medicos_data
-    try:
-        rows = db.get_medicos()
-        return [{"codmed": r["codmed"], "nome": r["nome"], "genero": r["genero"], 
-                 "especialidade": r["especialidade"], "telefone": r["telefone"], "email": r["email"]} for r in rows]
-    except Exception as e:
-        st.error(f"Erro ao buscar médicos: {str(e)}")
-        return []
+    return st.session_state.medicos_data
 
 def get_consultas():
     """Retorna todas as consultas."""
-    if USE_MOCK:
-        # Retorna consultas mock
-        if 'consultas_data' not in st.session_state:
-            st.session_state.consultas_data = []
-        return st.session_state.consultas_data
-    try:
-        rows = db.get_pedidos()
-        return rows
-    except Exception as e:
-        st.error(f"Erro ao buscar consultas: {str(e)}")
-        return []
+    return st.session_state.consultas_data
 
 def get_clinicas():
     """Retorna todas as clínicas."""
-    if USE_MOCK:
-        return st.session_state.clinicas_data
-    try:
-        rows = db.get_clinicas()
-        return [{"codcli": r["codcli"], "nome": r["nome"], "endereco": r["endereco"], 
-                 "telefone": r["telefone"], "email": r["email"]} for r in rows]
-    except Exception as e:
-        st.error(f"Erro ao buscar clínicas: {str(e)}")
-        return []
+    return st.session_state.clinicas_data
 
 # ============================================================================
 # TELAS DA APLICAÇÃO
@@ -336,243 +283,14 @@ def tela_medicos():
 
 
 def tela_consultas():
-    """Gerencia CRUD de consultas com validação de trigger."""
+    """Gerencia CRUD de consultas (implementação simplificada)."""
     st.markdown("## 📅 Gerenciamento de Consultas")
+    st.info("Tela de consultas - implementar CRUD completo conforme necessário")
     
-    #if USE_MOCK:
-    #   st.info("")
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Listar", "➕ Criar", "✏️ Editar", "🗑️ Deletar"])
-    
-    # TAB: LISTAR
-    with tab1:
-        st.subheader("📋 Consultas Agendadas")
-        try:
-            consultas = get_consultas()
-            if consultas:
-                # Formatar dados para visualização
-                dados_formatados = []
-                for c in consultas:
-                    dados_formatados.append({
-                        "Clínica": f"{c['CodCli']} - {c['clinica_nome'] or 'N/A'}",
-                        "Médico": f"{c['CodMed']} - {c['medico_nome'] or 'N/A'}",
-                        "Paciente": f"{c['CpfPaciente']} - {c['paciente_nome'] or 'N/A'}",
-                        "Data/Hora": c['Data_Hora'].strftime('%d/%m/%Y %H:%M') if hasattr(c['Data_Hora'], 'strftime') else str(c['Data_Hora'])
-                    })
-                df = pd.DataFrame(dados_formatados)
-                st.dataframe(df, use_container_width=True, hide_index=True)
-                st.info(f"📊 Total: {len(consultas)} consultas agendadas")
-            else:
-                st.info("ℹ️ Nenhuma consulta agendada no momento.")
-        except Exception as e:
-            st.error(f"❌ Erro ao listar consultas: {str(e)}")
-    
-    # TAB: CRIAR (COM VALIDAÇÃO DE TRIGGER)
-    with tab2:
-        st.subheader("➕ Agendar Nova Consulta")
-        
-        # Aviso sobre o trigger
-        st.info("🔔 **Atenção:** O sistema valida automaticamente se a consulta está dentro do prazo máximo de **60 dias (2 meses)** de antecedência.")
-        
-        # Buscar opções
-        try:
-            clinicas = get_clinicas()
-            medicos = get_medicos()
-            pacientes = get_pacientes()
-            
-            if not (clinicas and medicos and pacientes):
-                st.warning("⚠️ Cadastre clínicas, médicos e pacientes antes de agendar consultas.")
-                return
-            
-            with st.form("form_criar_consulta"):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    clinica_opts = [f"{c['codcli']} - {c['nome']}" for c in clinicas]
-                    clinica_sel = st.selectbox("Clínica", clinica_opts)
-                    codcli = clinica_sel.split(" - ")[0]
-                    
-                    medico_opts = [f"{m['codmed']} - {m['nome']} ({m['especialidade']})" for m in medicos]
-                    medico_sel = st.selectbox("Médico", medico_opts)
-                    codmed = medico_sel.split(" - ")[0]
-                
-                with col2:
-                    paciente_opts = [f"{p['cpf']} - {p['nome']}" for p in pacientes]
-                    paciente_sel = st.selectbox("Paciente", paciente_opts)
-                    cpf = paciente_sel.split(" - ")[0]
-                
-                col3, col4 = st.columns(2)
-                with col3:
-                    data_consulta = st.date_input("Data da Consulta", min_value=date.today())
-                with col4:
-                    hora_consulta = st.time_input("Hora da Consulta", value=datetime.now().time())
-                
-                # Calculadora de prazo
-                dias_antecedencia = (data_consulta - date.today()).days
-                if dias_antecedencia > 60:
-                    st.error(f"❌ **{dias_antecedencia} dias de antecedência** - Será BLOQUEADO pelo trigger! (máx 60 dias)")
-                elif dias_antecedencia < 0:
-                    st.warning("⚠️ Data no passado")
-                else:
-                    st.success(f"✅ **{dias_antecedencia} dias de antecedência** - Dentro do prazo permitido")
-                
-                submitted = st.form_submit_button("🗓️ Agendar Consulta", type="primary")
-            
-            if submitted:
-                try:
-                    # Combinar data e hora
-                    data_hora = datetime.combine(data_consulta, hora_consulta)
-                    
-                    if USE_MOCK:
-                        # Modo mock - simular criação
-                        nova_consulta = {
-                            "CodCli": codcli,
-                            "CodMed": codmed,
-                            "CpfPaciente": cpf,
-                            "Data_Hora": data_hora,
-                            "clinica_nome": next((c['nome'] for c in clinicas if c['codcli'] == codcli), None),
-                            "medico_nome": next((m['nome'] for m in medicos if m['codmed'] == codmed), None),
-                            "paciente_nome": next((p['nome'] for p in pacientes if p['cpf'] == cpf), None)
-                        }
-                        
-                        # Validação mock do trigger (60 dias)
-                        if dias_antecedencia > 60:
-                            st.error(f"🔔 **TRIGGER ATIVADO!** A consulta não pode ser agendada com mais de 60 dias de antecedência.")
-                            st.warning("⚠️ Validação: Data além do prazo permitido (máximo 60 dias).")
-                        else:
-                            st.session_state.consultas_data.append(nova_consulta)
-                            st.success(f"✅ Consulta agendada com sucesso para {data_hora.strftime('%d/%m/%Y às %H:%M')}!")
-                            st.balloons()
-                            st.rerun()
-                    else:
-                        # Modo MySQL - tentar criar (trigger será executado aqui!)
-                        db.create_pedido(codcli, codmed, cpf, data_hora)
-                        st.success(f"✅ Consulta agendada com sucesso para {data_hora.strftime('%d/%m/%Y às %H:%M')}!")
-                        st.balloons()
-                        st.rerun()
-                    
-                except ValidationError as ve:
-                    st.error(f"❌ Validação: {str(ve)}")
-                except Exception as e:
-                    error_msg = str(e)
-                    if "2 meses de antecedência" in error_msg or "60" in error_msg:
-                        st.error(f"🔔 **TRIGGER ATIVADO!** {error_msg}")
-                        st.warning("⚠️ A consulta não pode ser agendada com mais de 60 dias de antecedência.")
-                    else:
-                        st.error(f"❌ Erro ao agendar: {error_msg}")
-        
-        except Exception as e:
-            st.error(f"❌ Erro ao carregar dados: {str(e)}")
-    
-    # TAB: EDITAR
-    with tab3:
-        st.subheader("✏️ Editar Consulta")
-        try:
-            consultas = get_consultas()
-            if not consultas:
-                st.info("ℹ️ Nenhuma consulta para editar.")
-                return
-            
-            opcoes = [f"{c['CodCli']} | {c['CodMed']} | {c['CpfPaciente']} | {c['Data_Hora']}" for c in consultas]
-            consulta_sel = st.selectbox("Selecione a consulta", opcoes, key="sel_editar_consulta")
-            
-            partes = consulta_sel.split(" | ")
-            codcli_old, codmed_old, cpf_old, data_hora_old = partes[0], partes[1], partes[2], partes[3]
-            
-            consulta = next((c for c in consultas if str(c['CodCli']) == codcli_old and 
-                           str(c['CodMed']) == codmed_old and str(c['CpfPaciente']) == cpf_old), None)
-            
-            if consulta:
-                st.info("🔔 **Atenção:** A alteração de data também será validada pelo trigger (máx 60 dias).")
-                
-                with st.form("form_editar_consulta"):
-                    nova_data = st.date_input("Nova Data", value=date.today())
-                    nova_hora = st.time_input("Nova Hora", value=datetime.now().time())
-                    
-                    dias_antecedencia = (nova_data - date.today()).days
-                    if dias_antecedencia > 60:
-                        st.error(f"❌ {dias_antecedencia} dias - Será BLOQUEADO!")
-                    else:
-                        st.success(f"✅ {dias_antecedencia} dias - OK")
-                    
-                    submitted_edit = st.form_submit_button("💾 Salvar Alterações")
-                
-                if submitted_edit:
-                    try:
-                        nova_data_hora = datetime.combine(nova_data, nova_hora)
-                        
-                        if USE_MOCK:
-                            # Validação mock do trigger
-                            if dias_antecedencia > 60:
-                                st.error(f"🔔 **TRIGGER ATIVADO!** Não é possível agendar com mais de 60 dias.")
-                            else:
-                                # Atualizar no mock
-                                for c in st.session_state.consultas_data:
-                                    if (str(c['CodCli']) == codcli_old and 
-                                        str(c['CodMed']) == codmed_old and 
-                                        str(c['CpfPaciente']) == cpf_old):
-                                        c['Data_Hora'] = nova_data_hora
-                                        break
-                                st.success("✅ Consulta atualizada com sucesso!")
-                                st.rerun()
-                        else:
-                            # Modo MySQL
-                            old_keys = (codcli_old, codmed_old, cpf_old, data_hora_old)
-                            new_values = {'data_hora': nova_data_hora}
-                            db.update_pedido(old_keys, new_values)
-                            st.success("✅ Consulta atualizada com sucesso!")
-                            st.rerun()
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "2 meses" in error_msg or "60" in error_msg:
-                            st.error(f"🔔 **TRIGGER ATIVADO!** {error_msg}")
-                        else:
-                            st.error(f"❌ Erro: {error_msg}")
-        
-        except Exception as e:
-            st.error(f"❌ Erro: {str(e)}")
-    
-    # TAB: DELETAR
-    with tab4:
-        st.subheader("🗑️ Cancelar Consulta")
-        try:
-            consultas = get_consultas()
-            if not consultas:
-                st.info("ℹ️ Nenhuma consulta para cancelar.")
-                return
-            
-            opcoes = [f"{c['CodCli']} | {c['CodMed']} | {c['CpfPaciente']} | {c['Data_Hora']}" for c in consultas]
-            consulta_sel = st.selectbox("Selecione a consulta para cancelar", opcoes, key="sel_deletar_consulta")
-            
-            partes = consulta_sel.split(" | ")
-            codcli, codmed, cpf, data_hora = partes[0], partes[1], partes[2], partes[3]
-            
-            st.warning(f"⚠️ Tem certeza que deseja cancelar esta consulta?")
-            
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                if st.button("🗑️ Confirmar Cancelamento", type="primary"):
-                    try:
-                        if USE_MOCK:
-                            # Deletar do mock
-                            st.session_state.consultas_data = [
-                                c for c in st.session_state.consultas_data 
-                                if not (str(c['CodCli']) == codcli and 
-                                       str(c['CodMed']) == codmed and 
-                                       str(c['CpfPaciente']) == cpf)
-                            ]
-                            st.success("✅ Consulta cancelada com sucesso!")
-                            st.rerun()
-                        else:
-                            # Modo MySQL
-                            db.delete_pedido(codcli, codmed, cpf, data_hora)
-                            st.success("✅ Consulta cancelada com sucesso!")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Erro ao cancelar: {str(e)}")
-        
-        except Exception as e:
-            st.error(f"❌ Erro: {str(e)}")
+    consultas = get_consultas()
+    if consultas:
+        df = pd.DataFrame(consultas)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def tela_clinicas():
@@ -664,44 +382,80 @@ def tela_triggers():
     """Exibe informações sobre triggers do banco."""
     st.markdown("## 🔔 Triggers do Sistema")
     
-    st.markdown("### Validação de Intervalo de Agendamento")
+    st.markdown("### Validações Automáticas Implementadas")
     st.info("""
-    O banco de dados possui **2 triggers** que garantem que consultas sejam agendadas com antecedência máxima de **60 dias (2 meses)**.
-    Essas validações acontecem automaticamente no MySQL, impedindo agendamentos fora do prazo permitido.
+    O banco de dados possui **14 triggers** que garantem a integridade dos dados antes de qualquer INSERT ou UPDATE.
+    Essas validações acontecem automaticamente no MySQL, impedindo dados inválidos.
     """)
     
-    # Seção de validação
-    st.markdown("#### 📅 Regra de Negócio: Limite de Antecedência")
-    st.markdown("""
-    **Restrição:** Consultas só podem ser agendadas com no máximo **2 meses (60 dias)** de antecedência a partir da data atual.
+    # Seção de validações
+    col1, col2, col3 = st.columns(3)
     
-    **Triggers Implementados:**
-    - `tg_verifica_intervalo_agendamento` - Valida no INSERT
-    - `tg_verifica_intervalo_agendamento_upd` - Valida no UPDATE
+    with col1:
+        st.markdown("#### 📋 Validação de CPF")
+        st.markdown("""
+        **Formato obrigatório:** `XXX.XXX.XXX-XX`
+        
+        **Triggers:**
+        - `trg_validar_cpf_paciente_ins`
+        - `trg_validar_cpf_paciente_upd`
+        
+        **Entidade:** Paciente
+        
+        **Regex:** `^[0-9]{3}\\.[0-9]{3}\\.[0-9]{3}-[0-9]{2}$`
+        """)
     
-    **Entidade:** Consulta
+    with col2:
+        st.markdown("#### 📧 Validação de Email")
+        st.markdown("""
+        **Formato:** `usuario@dominio.com`
+        
+        **Triggers:**
+        - `trg_valida_email_clinica` (INSERT)
+        - `trg_valida_email_clinica_upd` (UPDATE)
+        - `trg_valida_email_medico` (INSERT)
+        - `trg_valida_email_medico_upd` (UPDATE)
+        - `trg_valida_email_paciente` (INSERT)
+        - `trg_valida_email_paciente_upd` (UPDATE)
+        
+        **Validação:** `Email LIKE '%_@_%._%'`
+        """)
     
-    **Validação:** `TIMESTAMPDIFF(DAY, CURDATE(), NEW.Data_Hora) > 60`
-    
-    **Mensagem de Erro:** "A consulta só pode ser agendada com no máximo 2 meses de antecedência."
-    """)
+    with col3:
+        st.markdown("#### 📞 Validação de Telefone")
+        st.markdown("""
+        **Clínica:** `(DD) XXXX-XXXX`  
+        *(4 dígitos após hífen)*
+        
+        **Médico/Paciente:** `(DD) XXXXX-XXXX`  
+        *(5 dígitos após hífen)*
+        
+        **Triggers:**
+        - `trg_validar_telefone_clinica_ins` (INSERT)
+        - `trg_validar_telefone_clinica_upd` (UPDATE)
+        - `trg_validar_telefone_medico_ins` (INSERT)
+        - `trg_validar_telefone_medico_upd` (UPDATE)
+        - `trg_validar_telefone_paciente_ins` (INSERT)
+        - `trg_validar_telefone_paciente_upd` (UPDATE)
+        """)
     
     st.markdown("---")
     
     # Exemplo de código de trigger
-    st.markdown("### 💻 Código do Trigger")
-    st.markdown("**Trigger de verificação de intervalo de agendamento (INSERT):**")
+    st.markdown("### 💻 Exemplo de Código de Trigger")
+    st.markdown("**Trigger de validação de CPF:**")
     st.code("""
-DELIMITER $$ 
-CREATE TRIGGER tg_verifica_intervalo_agendamento
-BEFORE INSERT ON Consulta
+DELIMITER $$
+CREATE TRIGGER trg_validar_cpf_paciente_ins
+BEFORE INSERT ON Paciente
 FOR EACH ROW
 BEGIN
-    IF TIMESTAMPDIFF(DAY, CURDATE(), NEW.Data_Hora) > 60 THEN
+    -- CPF deve estar exatamente no formato XXX.XXX.XXX-XX
+    IF NEW.CpfPaciente NOT REGEXP '^[0-9]{3}\\\\.[0-9]{3}\\\\.[0-9]{3}-[0-9]{2}$' THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'A consulta só pode ser agendada com no máximo 2 meses de antecedência.';
+        SET MESSAGE_TEXT = 'CPF inválido. Formato obrigatório: XXX.XXX.XXX-XX';
     END IF;
-END $$
+END$$
 DELIMITER ;
     """, language="sql")
     
@@ -710,55 +464,19 @@ DELIMITER ;
     # Tabela resumo
     st.markdown("### 📊 Resumo dos Triggers")
     triggers_data = [
-        {"Trigger": "tg_verifica_intervalo_agendamento", "Entidade": "Consulta", "Evento": "INSERT", "Validação": "Data ≤ 60 dias"},
-        {"Trigger": "tg_verifica_intervalo_agendamento_upd", "Entidade": "Consulta", "Evento": "UPDATE", "Validação": "Data ≤ 60 dias"},
+        {"Entidade": "Paciente", "Tipo": "CPF", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Paciente", "Tipo": "Email", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Paciente", "Tipo": "Telefone", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Médico", "Tipo": "Email", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Médico", "Tipo": "Telefone", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Clínica", "Tipo": "Email", "Eventos": "INSERT, UPDATE", "Total": 2},
+        {"Entidade": "Clínica", "Tipo": "Telefone", "Eventos": "INSERT, UPDATE", "Total": 2},
     ]
     
     df_triggers = pd.DataFrame(triggers_data)
     st.dataframe(df_triggers, use_container_width=True, hide_index=True)
     
-    st.success("✅ Total de 2 triggers implementados no banco de dados MySQL")
-    
-    st.markdown("---")
-    
-    # Seção de teste
-    st.markdown("### 🧪 Teste de Validação do Trigger")
-    st.info("**Como testar:** Tente agendar uma consulta com mais de 60 dias de antecedência na aba 'Consultas' → 'Criar'. O sistema deve bloquear e exibir a mensagem de erro do trigger.")
-    
-    # Calculadora de data
-    st.markdown("#### 📅 Calculadora de Prazo")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        from datetime import datetime, timedelta
-        data_hoje = datetime.now().date()
-        st.write(f"**Data atual:** {data_hoje.strftime('%d/%m/%Y')}")
-        
-        limite_permitido = data_hoje + timedelta(days=60)
-        st.write(f"**Limite máximo permitido:** {limite_permitido.strftime('%d/%m/%Y')}")
-    
-    with col2:
-        data_teste = st.date_input("Escolha uma data para testar:", value=data_hoje + timedelta(days=70))
-        dias_antecedencia = (data_teste - data_hoje).days
-        
-        if dias_antecedencia > 60:
-            st.error(f"❌ **{dias_antecedencia} dias de antecedência** - Será BLOQUEADO pelo trigger!")
-        elif dias_antecedencia < 0:
-            st.warning(f"⚠️ Data no passado - Consulta não pode ser agendada")
-        else:
-            st.success(f"✅ **{dias_antecedencia} dias de antecedência** - Será ACEITO pelo sistema")
-    
-    # Exemplos práticos
-    st.markdown("#### 💡 Exemplos de Teste")
-    exemplos = [
-        {"Data": (data_hoje + timedelta(days=30)).strftime('%d/%m/%Y'), "Dias": "30 dias", "Resultado": "✅ ACEITO"},
-        {"Data": (data_hoje + timedelta(days=60)).strftime('%d/%m/%Y'), "Dias": "60 dias", "Resultado": "✅ ACEITO"},
-        {"Data": (data_hoje + timedelta(days=61)).strftime('%d/%m/%Y'), "Dias": "61 dias", "Resultado": "❌ BLOQUEADO"},
-        {"Data": (data_hoje + timedelta(days=90)).strftime('%d/%m/%Y'), "Dias": "90 dias", "Resultado": "❌ BLOQUEADO"},
-    ]
-    
-    df_exemplos = pd.DataFrame(exemplos)
-    st.dataframe(df_exemplos, use_container_width=True, hide_index=True)
+    st.success("✅ Total de 14 triggers implementados no banco de dados MySQL")
 
 
 
